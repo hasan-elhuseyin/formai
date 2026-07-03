@@ -33,6 +33,7 @@ dependencies:
   flutter:
     sdk: flutter
   google_mlkit_pose_detection: ^0.14.1
+  image_picker: ^1.2.3
   shared_preferences: ^2.5.5
   uuid: ^4.5.3
 

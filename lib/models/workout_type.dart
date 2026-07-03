@@ -6,6 +6,10 @@ enum TrackingProfile {
   lunge,
   plank,
   shoulderPress,
+  burpee,
+  mountainClimber,
+  gluteBridge,
+  benchDip,
   generic,
 }
 
@@ -18,6 +22,8 @@ class WorkoutType {
     required this.trackingProfile,
     required this.defaultRepGoal,
     required this.defaultSetGoal,
+    required this.metValue,
+    required this.secondsPerRep,
     required this.primaryCue,
     required this.secondaryCue,
   });
@@ -29,6 +35,8 @@ class WorkoutType {
   final TrackingProfile trackingProfile;
   final int defaultRepGoal;
   final int defaultSetGoal;
+  final double metValue;
+  final double secondsPerRep;
   final String primaryCue;
   final String secondaryCue;
 
@@ -41,6 +49,8 @@ class WorkoutType {
       trackingProfile: trackingProfileFromJson(json['trackingProfile']),
       defaultRepGoal: json['defaultRepGoal'] as int,
       defaultSetGoal: json['defaultSetGoal'] as int,
+      metValue: (json['metValue'] as num?)?.toDouble() ?? 4.5,
+      secondsPerRep: (json['secondsPerRep'] as num?)?.toDouble() ?? 4,
       primaryCue: json['primaryCue'] as String,
       secondaryCue: json['secondaryCue'] as String,
     );
@@ -55,6 +65,8 @@ class WorkoutType {
       'trackingProfile': trackingProfile.name,
       'defaultRepGoal': defaultRepGoal,
       'defaultSetGoal': defaultSetGoal,
+      'metValue': metValue,
+      'secondsPerRep': secondsPerRep,
       'primaryCue': primaryCue,
       'secondaryCue': secondaryCue,
     };

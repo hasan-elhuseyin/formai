@@ -7,6 +7,7 @@ import '../widgets/phone_frame.dart';
 import 'analysis_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
+import 'stats_screen.dart';
 import 'workouts_screen.dart';
 
 class AppShell extends StatelessWidget {
@@ -15,6 +16,8 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = AppScope.of(context);
+    final workoutFullscreen =
+        appState.selectedTab == 2 && appState.activeSession != null;
 
     return PhoneFrame(
       child: Scaffold(
@@ -23,12 +26,13 @@ class AppShell extends StatelessWidget {
         body: Stack(
           children: [
             Positioned.fill(child: _TabBody(index: appState.selectedTab)),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BottomCoachNav(currentIndex: appState.selectedTab),
-            ),
+            if (!workoutFullscreen)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: BottomCoachNav(currentIndex: appState.selectedTab),
+              ),
           ],
         ),
       ),
@@ -48,6 +52,7 @@ class _TabBody extends StatelessWidget {
       1 => const WorkoutsScreen(),
       2 => const AnalysisScreen(),
       3 => const ProfileScreen(),
+      4 => const StatsScreen(),
       _ => const HomeScreen(),
     };
   }

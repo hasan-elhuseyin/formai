@@ -117,7 +117,15 @@ class AiPlanService {
       }
     }
 
-    if (goal.contains('strength') || goal.contains('muscle')) {
+    if (goal.contains('cardio') ||
+        goal.contains('conditioning') ||
+        goal.contains('fat') ||
+        goal.contains('lose')) {
+      add('burpee');
+      add('mountain_climber');
+      add('squat');
+      add('plank');
+    } else if (goal.contains('strength') || goal.contains('muscle')) {
       add('push_up');
       add(bodyweight ? 'pull_up' : 'deadlift');
       add('squat');
@@ -131,12 +139,13 @@ class AiPlanService {
       add('squat');
       add('reverse_lunge');
       add('deadlift');
-      add('plank');
+      add('glute_bridge');
     } else {
       add('push_up');
       add('squat');
       add('pull_up');
       add('plank');
+      add('bench_dip');
     }
 
     final days = _scheduleDays(targetDays);

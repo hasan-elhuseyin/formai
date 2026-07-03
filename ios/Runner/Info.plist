@@ -51,6 +51,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>FORMAI uses the camera to analyze your exercise form and provide coaching feedback.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FORMAI lets you choose a profile picture for your account.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

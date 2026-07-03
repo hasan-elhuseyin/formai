@@ -22,15 +22,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   final TextEditingController _goalController = TextEditingController(
     text: 'Build strength and improve form',
   );
-  final TextEditingController _equipmentController = TextEditingController(
-    text: 'Bodyweight',
-  );
   final TextEditingController _reminderController = TextEditingController(
     text: '08:00',
   );
   final TextEditingController _coachController = TextEditingController();
 
   String _experience = 'Beginner';
+  String _equipment = 'Bodyweight';
   int _daysPerWeek = 3;
   String _coachReply =
       'Tell me your goal, training days, and equipment. I will shape it into a trackable plan.';
@@ -40,7 +38,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   void dispose() {
     _searchController.dispose();
     _goalController.dispose();
-    _equipmentController.dispose();
     _reminderController.dispose();
     _coachController.dispose();
     super.dispose();
@@ -51,12 +48,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     final appState = AppScope.of(context);
     final planned = appState.filterExercises(_searchController.text);
     final catalog = appState.filterWorkoutTypes(_searchController.text);
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return Stack(
       children: [
         Positioned.fill(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 96, 24, 128),
+            padding: EdgeInsets.fromLTRB(24, 96 + topInset, 24, 128),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -69,10 +67,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 const SizedBox(height: 24),
                 _PlanBuilderPanel(
                   goalController: _goalController,
-                  equipmentController: _equipmentController,
                   reminderController: _reminderController,
                   coachController: _coachController,
                   experience: _experience,
+                  equipment: _equipment,
                   daysPerWeek: _daysPerWeek,
                   coachReply: _coachReply,
                   isGenerating: _isGenerating,
@@ -83,6 +81,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   },
                   onDaysChanged: (value) =>
                       setState(() => _daysPerWeek = value),
+                  onEquipmentChanged: (value) {
+                    if (value != null) {
+                      setState(() => _equipment = value);
+                    }
+                  },
                   onGenerate: _generatePlan,
                   onSendMessage: _sendCoachMessage,
                 ),
@@ -154,7 +157,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         goal: _goalController.text,
         experience: _experience,
         daysPerWeek: _daysPerWeek,
-        equipment: _equipmentController.text,
+        equipment: _equipment,
         reminderTime: _reminderController.text.trim().isEmpty
             ? null
             : _reminderController.text.trim(),
@@ -195,9 +198,23 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         _goalController.text = reply.request!.goal;
         _experience = reply.request!.experience;
         _daysPerWeek = reply.request!.daysPerWeek;
-        _equipmentController.text = reply.request!.equipment;
+        _equipment = _closestEquipmentOption(reply.request!.equipment);
       }
     });
+  }
+
+  String _closestEquipmentOption(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized.contains('gym') || normalized.contains('weight')) {
+      return 'Gym or weights';
+    }
+    if (normalized.contains('dumbbell')) {
+      return 'Dumbbells';
+    }
+    if (normalized.contains('band')) {
+      return 'Resistance bands';
+    }
+    return 'Bodyweight';
   }
 
   Future<void> _showQuickAddSheet(
@@ -349,12 +366,13 @@ class _SimpleTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 72,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          height: 72 + topInset,
+          padding: EdgeInsets.fromLTRB(24, 16 + topInset, 24, 16),
           color: AppColors.background.withValues(alpha: 0.62),
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -434,29 +452,31 @@ class _SearchField extends StatelessWidget {
 class _PlanBuilderPanel extends StatelessWidget {
   const _PlanBuilderPanel({
     required this.goalController,
-    required this.equipmentController,
     required this.reminderController,
     required this.coachController,
     required this.experience,
+    required this.equipment,
     required this.daysPerWeek,
     required this.coachReply,
     required this.isGenerating,
     required this.onExperienceChanged,
     required this.onDaysChanged,
+    required this.onEquipmentChanged,
     required this.onGenerate,
     required this.onSendMessage,
   });
 
   final TextEditingController goalController;
-  final TextEditingController equipmentController;
   final TextEditingController reminderController;
   final TextEditingController coachController;
   final String experience;
+  final String equipment;
   final int daysPerWeek;
   final String coachReply;
   final bool isGenerating;
   final ValueChanged<String?> onExperienceChanged;
   final ValueChanged<int> onDaysChanged;
+  final ValueChanged<String?> onEquipmentChanged;
   final VoidCallback onGenerate;
   final VoidCallback onSendMessage;
 
@@ -519,9 +539,17 @@ class _PlanBuilderPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _CompactInput(
-                  controller: equipmentController,
+                child: _LabeledSelectBox<String>(
                   label: 'EQUIPMENT',
+                  value: equipment,
+                  values: const [
+                    'Bodyweight',
+                    'Dumbbells',
+                    'Resistance bands',
+                    'Gym or weights',
+                  ],
+                  labelBuilder: (value) => value,
+                  onChanged: onEquipmentChanged,
                 ),
               ),
               const SizedBox(width: 10),
@@ -688,6 +716,76 @@ class _SelectBox<T> extends StatelessWidget {
           ],
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+}
+
+class _LabeledSelectBox<T> extends StatelessWidget {
+  const _LabeledSelectBox({
+    required this.label,
+    required this.value,
+    required this.values,
+    required this.labelBuilder,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T value;
+  final List<T> values;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.fromLTRB(14, 7, 10, 6),
+      decoration: BoxDecoration(
+        color: AppColors.input,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.slate,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              height: 1,
+            ),
+          ),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<T>(
+                value: value,
+                isExpanded: true,
+                dropdownColor: AppColors.panel,
+                iconEnabledColor: AppColors.lime,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+                items: [
+                  for (final item in values)
+                    DropdownMenuItem<T>(
+                      value: item,
+                      child: Text(
+                        labelBuilder(item),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

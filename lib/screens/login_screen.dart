@@ -51,6 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const _LoginBackdrop(),
               LayoutBuilder(
                 builder: (context, constraints) {
+                  final topInset = MediaQuery.paddingOf(context).top;
                   return ClipRect(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
@@ -61,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(
                             24,
-                            _isSignUp ? 42 : 70,
+                            topInset + (_isSignUp ? 42 : 70),
                             24,
                             32,
                           ),

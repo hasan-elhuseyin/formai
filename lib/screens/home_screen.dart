@@ -18,12 +18,13 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = AppScope.of(context);
     final exercises = appState.exercises;
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return Stack(
       children: [
         Positioned.fill(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 96, 24, 128),
+            padding: EdgeInsets.fromLTRB(24, 96 + topInset, 24, 128),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -32,7 +33,7 @@ class HomeScreen extends StatelessWidget {
                 _WeeklyStatsCard(
                   workouts: appState.completedWorkoutCount,
                   sets: appState.totalSetCount,
-                  totalReps: appState.totalRepCount,
+                  calories: appState.totalCaloriesBurned,
                   formScore: appState.averageFormScore,
                 ),
                 const SizedBox(height: 32),
@@ -57,12 +58,13 @@ class _HomeTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 72,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          height: 72 + topInset,
+          padding: EdgeInsets.fromLTRB(24, 16 + topInset, 24, 16),
           color: AppColors.background.withValues(alpha: 0.62),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -82,7 +84,14 @@ class _HomeTopBar extends StatelessWidget {
                   const FormaiWordmark(size: 20),
                 ],
               ),
-              const Icon(Icons.stacked_line_chart, color: AppColors.limeAlt),
+              IconButton(
+                tooltip: 'Progress',
+                onPressed: AppScope.of(context).openStats,
+                icon: const Icon(
+                  Icons.stacked_line_chart,
+                  color: AppColors.limeAlt,
+                ),
+              ),
             ],
           ),
         ),
@@ -129,13 +138,13 @@ class _WeeklyStatsCard extends StatelessWidget {
   const _WeeklyStatsCard({
     required this.workouts,
     required this.sets,
-    required this.totalReps,
+    required this.calories,
     required this.formScore,
   });
 
   final int workouts;
   final int sets;
-  final int totalReps;
+  final double calories;
   final int formScore;
 
   @override
@@ -214,7 +223,10 @@ class _WeeklyStatsCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 32),
-                _StatPair(value: '$totalReps Reps', label: 'TOTAL VOLUME'),
+                _StatPair(
+                  value: '${calories.toStringAsFixed(0)} Kcal',
+                  label: 'ENERGY',
+                ),
               ],
             ),
           ],

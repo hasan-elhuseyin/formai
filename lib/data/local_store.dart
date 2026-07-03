@@ -40,12 +40,18 @@ class UserData {
     required this.sessions,
     required this.metricUnits,
     required this.voiceFeedback,
+    required this.bodyWeightKg,
+    required this.heightCm,
+    required this.profileImagePath,
   });
 
   final List<Exercise> workouts;
   final List<WorkoutSession> sessions;
   final bool metricUnits;
   final bool voiceFeedback;
+  final double bodyWeightKg;
+  final double heightCm;
+  final String? profileImagePath;
 
   factory UserData.empty() {
     return const UserData(
@@ -53,6 +59,9 @@ class UserData {
       sessions: [],
       metricUnits: true,
       voiceFeedback: true,
+      bodyWeightKg: 75,
+      heightCm: 175,
+      profileImagePath: null,
     );
   }
 
@@ -61,12 +70,20 @@ class UserData {
     List<WorkoutSession>? sessions,
     bool? metricUnits,
     bool? voiceFeedback,
+    double? bodyWeightKg,
+    double? heightCm,
+    Object? profileImagePath = _sentinel,
   }) {
     return UserData(
       workouts: workouts ?? this.workouts,
       sessions: sessions ?? this.sessions,
       metricUnits: metricUnits ?? this.metricUnits,
       voiceFeedback: voiceFeedback ?? this.voiceFeedback,
+      bodyWeightKg: bodyWeightKg ?? this.bodyWeightKg,
+      heightCm: heightCm ?? this.heightCm,
+      profileImagePath: identical(profileImagePath, _sentinel)
+          ? this.profileImagePath
+          : profileImagePath as String?,
     );
   }
 
@@ -80,6 +97,9 @@ class UserData {
           .toList(growable: false),
       metricUnits: json['metricUnits'] as bool? ?? true,
       voiceFeedback: json['voiceFeedback'] as bool? ?? true,
+      bodyWeightKg: (json['bodyWeightKg'] as num?)?.toDouble() ?? 75,
+      heightCm: (json['heightCm'] as num?)?.toDouble() ?? 175,
+      profileImagePath: json['profileImagePath'] as String?,
     );
   }
 
@@ -89,9 +109,14 @@ class UserData {
       'sessions': sessions.map((session) => session.toJson()).toList(),
       'metricUnits': metricUnits,
       'voiceFeedback': voiceFeedback,
+      'bodyWeightKg': bodyWeightKg,
+      'heightCm': heightCm,
+      'profileImagePath': profileImagePath,
     };
   }
 }
+
+const Object _sentinel = Object();
 
 class LocalStore {
   static const String _accountsKey = 'formai.accounts.v1';

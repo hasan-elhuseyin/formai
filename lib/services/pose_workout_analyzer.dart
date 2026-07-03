@@ -91,6 +91,18 @@ class PoseWorkoutAnalyzer {
         pose,
         points,
       ),
+      TrackingProfile.burpee => _analyzeBurpee(exercise, pose, points),
+      TrackingProfile.mountainClimber => _analyzeMountainClimber(
+        exercise,
+        pose,
+        points,
+      ),
+      TrackingProfile.gluteBridge => _analyzeGluteBridge(
+        exercise,
+        pose,
+        points,
+      ),
+      TrackingProfile.benchDip => _analyzeBenchDip(exercise, pose, points),
       TrackingProfile.generic => _analyzeGeneric(exercise, points),
     };
   }
@@ -563,6 +575,253 @@ class PoseWorkoutAnalyzer {
       phase: 'Tracking',
       landmarks: points,
       repAdded: false,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeBurpee(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final side = _bestSide(pose, lowerBody: true);
+    final shoulder = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftShoulder,
+      PoseLandmarkType.rightShoulder,
+    );
+    final wrist = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftWrist,
+      PoseLandmarkType.rightWrist,
+    );
+    final hip = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftHip,
+      PoseLandmarkType.rightHip,
+    );
+    final ankle = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftAnkle,
+      PoseLandmarkType.rightAnkle,
+    );
+    if ([shoulder, wrist, hip, ankle].any((point) => point == null)) {
+      return _notVisible(exercise, points);
+    }
+
+    final bodyLine = _angle(shoulder!, hip!, ankle!);
+    final plank = bodyLine > 152 && (hip.y - shoulder.y).abs() < 120;
+    final jumpReach = wrist!.y < shoulder.y && shoulder.y < hip.y;
+    final repAdded = _countDownUpRep(
+      bottom: plank,
+      top: jumpReach,
+      exercise: exercise,
+    );
+    final hipsSagging = plank && bodyLine < 165;
+    final score = _score([
+      if (hipsSagging) 16 else 0,
+      if (jumpReach && wrist.y > shoulder.y - 80) 12 else 0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: jumpReach ? 'Full extension reached' : 'Snap to strong plank',
+      secondary: hipsSagging
+          ? 'Keep hips from sagging as you kick back.'
+          : 'Land softly and brace before the next rep.',
+      phase: jumpReach
+          ? 'Jump'
+          : plank
+          ? 'Plank'
+          : 'Transition',
+      landmarks: points,
+      repAdded: repAdded,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeMountainClimber(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final side = _bestSide(pose, lowerBody: true);
+    final shoulder = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftShoulder,
+      PoseLandmarkType.rightShoulder,
+    );
+    final hip = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftHip,
+      PoseLandmarkType.rightHip,
+    );
+    final knee = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftKnee,
+      PoseLandmarkType.rightKnee,
+    );
+    final ankle = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftAnkle,
+      PoseLandmarkType.rightAnkle,
+    );
+    if ([shoulder, hip, knee, ankle].any((point) => point == null)) {
+      return _notVisible(exercise, points);
+    }
+
+    final bodyLine = _angle(shoulder!, hip!, ankle!);
+    final kneeDrive =
+        (knee!.x - hip.x).abs() > _torsoScale(shoulder, hip) * 0.45;
+    final extended = (knee.x - hip.x).abs() < _torsoScale(shoulder, hip) * 0.22;
+    final repAdded = _countDownUpRep(
+      bottom: kneeDrive,
+      top: extended,
+      exercise: exercise,
+    );
+    final hipsBouncing = bodyLine < 154;
+    final score = _score([
+      if (hipsBouncing) 18 else 0,
+      if (!kneeDrive && _phase == _RepPhase.bottom) 10 else 0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: hipsBouncing ? 'Level your hips' : 'Knee drive detected',
+      secondary: 'Keep shoulders over hands and move from the hips.',
+      phase: kneeDrive ? 'Drive' : 'Reset',
+      landmarks: points,
+      repAdded: repAdded,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeGluteBridge(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final side = _bestSide(pose, lowerBody: true);
+    final shoulder = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftShoulder,
+      PoseLandmarkType.rightShoulder,
+    );
+    final hip = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftHip,
+      PoseLandmarkType.rightHip,
+    );
+    final knee = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftKnee,
+      PoseLandmarkType.rightKnee,
+    );
+    if ([shoulder, hip, knee].any((point) => point == null)) {
+      return _notVisible(exercise, points);
+    }
+
+    final bridgeLine = _angle(shoulder!, hip!, knee!);
+    final top = bridgeLine > 158;
+    final bottom = bridgeLine < 128;
+    final repAdded = _countDownUpRep(
+      bottom: bottom,
+      top: top,
+      exercise: exercise,
+    );
+    final overArch = top && bridgeLine > 176;
+    final score = _score([
+      if (!top && _phase == _RepPhase.bottom) 12 else 0,
+      if (overArch) 10 else 0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: top ? 'Hip lockout reached' : 'Drive hips higher',
+      secondary: overArch
+          ? 'Squeeze glutes without over-arching the lower back.'
+          : 'Press through heels and keep ribs tucked.',
+      phase: top
+          ? 'Top'
+          : bottom
+          ? 'Bottom'
+          : 'Moving',
+      landmarks: points,
+      repAdded: repAdded,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeBenchDip(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final side = _bestSide(pose, lowerBody: false);
+    final shoulder = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftShoulder,
+      PoseLandmarkType.rightShoulder,
+    );
+    final elbow = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftElbow,
+      PoseLandmarkType.rightElbow,
+    );
+    final wrist = _landmark(
+      pose,
+      side,
+      PoseLandmarkType.leftWrist,
+      PoseLandmarkType.rightWrist,
+    );
+    if ([shoulder, elbow, wrist].any((point) => point == null)) {
+      return _notVisible(exercise, points);
+    }
+
+    final elbowAngle = _angle(shoulder!, elbow!, wrist!);
+    final bottom = elbowAngle < 94;
+    final top = elbowAngle > 155;
+    final repAdded = _countDownUpRep(
+      bottom: bottom,
+      top: top,
+      exercise: exercise,
+    );
+    final tooDeep = elbowAngle < 62;
+    final score = _score([
+      if (tooDeep) 16 else 0,
+      if (!bottom && _phase == _RepPhase.bottom) 10 else 0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: top ? 'Strong lockout' : 'Control the dip',
+      secondary: tooDeep
+          ? 'Stop around 90 degrees to keep shoulders comfortable.'
+          : 'Keep elbows tracking back and shoulders down.',
+      phase: bottom
+          ? 'Bottom'
+          : top
+          ? 'Lockout'
+          : 'Moving',
+      landmarks: points,
+      repAdded: repAdded,
       poseVisible: true,
     );
   }

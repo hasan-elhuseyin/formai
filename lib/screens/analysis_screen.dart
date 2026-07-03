@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
@@ -31,7 +32,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   WorkoutAnalysisFrame? _analysis;
   String? _cameraError;
   bool _isRecording = false;
+  bool _isFullscreen = false;
   bool _isProcessingFrame = false;
+  Duration _elapsed = Duration.zero;
+  Timer? _timer;
   DateTime _lastProcessedFrame = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
@@ -43,6 +47,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   void dispose() {
     _stopImageStream();
+    _timer?.cancel();
     _controller?.dispose();
     _poseDetector.close();
     super.dispose();
@@ -52,12 +57,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Widget build(BuildContext context) {
     final appState = AppScope.of(context);
     final exercise = appState.selectedExercise;
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return Stack(
       children: [
         Positioned.fill(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 92, 24, 128),
+            padding: EdgeInsets.fromLTRB(24, 92 + topInset, 24, 128),
             child: exercise == null
                 ? _NoWorkoutSelected(
                     onOpenWorkouts: () => appState.selectTab(1),
@@ -99,9 +105,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       ),
                       const SizedBox(height: 34),
                       LimeButton(
-                        label: _isRecording
-                            ? 'PAUSE ANALYSIS'
-                            : 'START ANALYSIS',
+                        label: _isRecording ? 'STOP WORKOUT' : 'START WORKOUT',
                         icon: _isRecording ? Icons.pause : Icons.play_arrow,
                         height: 68,
                         fontSize: 18,
@@ -136,6 +140,42 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           ),
         ),
         const Positioned(left: 0, right: 0, top: 0, child: _AnalysisTopBar()),
+        if (exercise != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !_isFullscreen,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 360),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.92, end: 1).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _isFullscreen
+                    ? _FullscreenWorkoutView(
+                        key: const ValueKey('fullscreen-workout'),
+                        controller: _controller,
+                        cameraError: _cameraError,
+                        exercise: exercise,
+                        analysis: _analysis,
+                        elapsed: _elapsed,
+                        onStop: () => _finishWorkout(exercise),
+                      )
+                    : const SizedBox.shrink(key: ValueKey('window-workout')),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -151,10 +191,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         return;
       }
 
-      final camera = cameras.firstWhere(
-        (description) => description.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
-      );
+      final camera = _selectBestFrontCamera(cameras);
       final controller = CameraController(
         camera,
         ResolutionPreset.medium,
@@ -183,17 +220,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   Future<void> _toggleAnalysis(Exercise exercise) async {
-    final appState = AppScope.of(context);
     if (_isRecording) {
-      await _stopImageStream();
-      if (mounted) {
-        setState(() => _isRecording = false);
-      }
-      await appState.endWorkoutSession(
-        summary: _analysis == null
-            ? 'Session saved.'
-            : '${_analysis!.primaryFeedback} ${_analysis!.secondaryFeedback}',
-      );
+      await _finishWorkout(exercise);
       return;
     }
 
@@ -207,18 +235,84 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
 
     _workoutAnalyzer.resetFor(exercise);
+    final appState = AppScope.of(context);
     await appState.beginWorkoutSession(exercise);
+    if (!mounted) {
+      return;
+    }
     try {
       await controller.startImageStream(_processCameraImage);
       if (mounted) {
         setState(() {
           _isRecording = true;
+          _isFullscreen = true;
           _analysis = null;
+          _elapsed = Duration.zero;
         });
+        _startTimer();
       }
     } on CameraException catch (error) {
       _showMessage(error.description ?? error.code);
     }
+  }
+
+  Future<void> _finishWorkout(
+    Exercise exercise, {
+    bool completed = false,
+  }) async {
+    if (!_isRecording && !_isFullscreen) {
+      return;
+    }
+    _timer?.cancel();
+    await _stopImageStream();
+    if (!mounted) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _isFullscreen = false;
+      });
+    }
+    await AppScope.of(context).endWorkoutSession(
+      summary: completed
+          ? 'Workout completed.'
+          : _analysis == null
+          ? 'Session saved.'
+          : '${_analysis!.primaryFeedback} ${_analysis!.secondaryFeedback}',
+    );
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_isRecording) {
+        return;
+      }
+      setState(() => _elapsed += const Duration(seconds: 1));
+    });
+  }
+
+  CameraDescription _selectBestFrontCamera(List<CameraDescription> cameras) {
+    final frontCameras = cameras
+        .where(
+          (description) =>
+              description.lensDirection == CameraLensDirection.front,
+        )
+        .toList(growable: false);
+    if (frontCameras.isEmpty) {
+      return cameras.first;
+    }
+    final wide = frontCameras
+        .where((camera) {
+          final name = camera.name.toLowerCase();
+          return name.contains('ultra') ||
+              name.contains('wide') ||
+              name.contains('0.5') ||
+              name.contains('0,5');
+        })
+        .toList(growable: false);
+    return wide.isNotEmpty ? wide.first : frontCameras.first;
   }
 
   Future<void> _stopImageStream() async {
@@ -276,6 +370,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
       setState(() => _analysis = frame);
       await AppScope.of(context).recordAnalysisFrame(frame);
+      if (frame.repCount >= exercise.targetReps && _isRecording) {
+        await _finishWorkout(exercise, completed: true);
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _cameraError = error.toString());
@@ -306,12 +403,13 @@ class _AnalysisTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 72,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          height: 72 + topInset,
+          padding: EdgeInsets.fromLTRB(24, 16 + topInset, 24, 16),
           color: AppColors.background.withValues(alpha: 0.62),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -563,6 +661,253 @@ class _VideoPreview extends StatelessWidget {
   }
 }
 
+class _FullscreenWorkoutView extends StatelessWidget {
+  const _FullscreenWorkoutView({
+    required super.key,
+    required this.controller,
+    required this.cameraError,
+    required this.exercise,
+    required this.analysis,
+    required this.elapsed,
+    required this.onStop,
+  });
+
+  final CameraController? controller;
+  final String? cameraError;
+  final Exercise exercise;
+  final WorkoutAnalysisFrame? analysis;
+  final Duration elapsed;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final reps = analysis?.repCount ?? exercise.repCount;
+    final sets = analysis?.setCount ?? exercise.setCount;
+    final form = analysis?.formScore ?? exercise.depthScore;
+    final remaining = (exercise.targetReps - reps).clamp(
+      0,
+      exercise.targetReps,
+    );
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Colors.black),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _LiveCameraSurface(controller: controller, error: cameraError),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.55),
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.72),
+                ],
+                stops: const [0, 0.45, 1],
+              ),
+            ),
+          ),
+          _PoseOverlay(analysis: analysis),
+          Positioned(
+            left: 20,
+            right: 20,
+            top: topInset + 16,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    exercise.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                _LivePill(active: true),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 16,
+            top: topInset + 92,
+            child: Column(
+              children: [
+                _StatChip(label: 'TIME', value: _formatDuration(elapsed)),
+                const SizedBox(height: 10),
+                _StatChip(label: 'REPS', value: '$reps/${exercise.targetReps}'),
+                const SizedBox(height: 10),
+                _StatChip(label: 'SETS', value: '$sets/${exercise.setGoal}'),
+              ],
+            ),
+          ),
+          Positioned(
+            right: 16,
+            top: topInset + 92,
+            child: Column(
+              children: [
+                _StatChip(label: 'FORM', value: '$form%'),
+                const SizedBox(height: 10),
+                _StatChip(label: 'LEFT', value: '$remaining'),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: bottomInset + 24,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.48),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Text(
+                      analysis?.primaryFeedback ??
+                          'Keep your full body in frame',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        height: 18 / 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Material(
+                  color: AppColors.alert,
+                  borderRadius: BorderRadius.circular(18),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: onStop,
+                    child: const SizedBox(
+                      width: 66,
+                      height: 66,
+                      child: Icon(
+                        Icons.stop_rounded,
+                        color: Color(0xFF35110E),
+                        size: 34,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LivePill extends StatelessWidget {
+  const _LivePill({required this.active});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.50),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: active ? AppColors.alert : AppColors.slate,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'LIVE',
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 82,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.50),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.lime,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.slate,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatDuration(Duration duration) {
+  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
 class _LiveCameraSurface extends StatelessWidget {
   const _LiveCameraSurface({required this.controller, required this.error});
 
@@ -661,7 +1006,10 @@ class _PoseOverlayPainter extends CustomPainter {
       ..color = AppColors.lime.withValues(alpha: 0.82)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
-    final pointPaint = Paint()..color = AppColors.lime;
+    final pointPaint = Paint()
+      ..color = AppColors.lime
+      ..style = PaintingStyle.fill;
+    final connectedPoints = <PoseLandmarkType>{};
 
     Offset map(Offset normalized) {
       return Offset(normalized.dx * size.width, normalized.dy * size.height);
@@ -672,11 +1020,17 @@ class _PoseOverlayPainter extends CustomPainter {
       final b = landmarks[connection.$2];
       if (a != null && b != null) {
         canvas.drawLine(map(a), map(b), linePaint);
+        connectedPoints
+          ..add(connection.$1)
+          ..add(connection.$2);
       }
     }
 
-    for (final point in landmarks.values) {
-      canvas.drawCircle(map(point), 3.2, pointPaint);
+    for (final type in connectedPoints) {
+      final point = landmarks[type];
+      if (point != null) {
+        canvas.drawCircle(map(point), 2.4, pointPaint);
+      }
     }
   }
 

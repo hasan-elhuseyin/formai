@@ -54,6 +54,9 @@ class AppState extends ChangeNotifier {
   int get selectedTab => _selectedTab;
   bool get metricUnits => _data.metricUnits;
   bool get voiceFeedback => _data.voiceFeedback;
+  double get bodyWeightKg => _data.bodyWeightKg;
+  double get heightCm => _data.heightCm;
+  String? get profileImagePath => _data.profileImagePath;
 
   int get completedWorkoutCount {
     return _data.sessions.where((session) => session.isComplete).length;
@@ -81,6 +84,18 @@ class AppState extends ChangeNotifier {
     return (scored.fold<int>(0, (total, session) => total + session.formScore) /
             scored.length)
         .round();
+  }
+
+  double get totalCaloriesBurned {
+    return _data.sessions.fold(
+      0,
+      (total, session) => total + session.caloriesBurned,
+    );
+  }
+
+  void openStats() {
+    _selectedTab = 4;
+    notifyListeners();
   }
 
   Future<void> _load() async {
@@ -356,11 +371,12 @@ class AppState extends ChangeNotifier {
       workoutId: current.id,
       workoutName: current.name,
       startedAt: DateTime.now(),
-      targetReps: current.repGoal,
+      targetReps: current.targetReps,
       targetSets: current.setGoal,
       repsCompleted: 0,
       setsCompleted: 0,
       formScore: current.depthScore,
+      caloriesBurned: 0,
       coachSummary: 'Session started.',
     );
     await _saveUserData();
@@ -391,6 +407,9 @@ class AppState extends ChangeNotifier {
         repsCompleted: frame.repCount,
         setsCompleted: frame.setCount,
         formScore: frame.formScore,
+        caloriesBurned: _calculateCalories(
+          active.copyWith(repsCompleted: frame.repCount),
+        ),
         coachSummary: '${frame.primaryFeedback} ${frame.secondaryFeedback}',
       );
     }
@@ -409,6 +428,7 @@ class AppState extends ChangeNotifier {
 
     final completed = active.copyWith(
       endedAt: DateTime.now(),
+      caloriesBurned: _calculateCalories(active),
       coachSummary: summary,
     );
     final exercise = _findMatchingExercise(active.workoutId);
@@ -464,6 +484,50 @@ class AppState extends ChangeNotifier {
     _data = _data.copyWith(voiceFeedback: value);
     await _saveUserData();
     notifyListeners();
+  }
+
+  Future<void> updateBodyMetrics({
+    required double bodyWeightKg,
+    required double heightCm,
+  }) async {
+    _data = _data.copyWith(
+      bodyWeightKg: bodyWeightKg.clamp(30, 250).toDouble(),
+      heightCm: heightCm.clamp(100, 240).toDouble(),
+    );
+    await _saveUserData();
+    notifyListeners();
+  }
+
+  Future<void> updateProfileImagePath(String? path) async {
+    _data = _data.copyWith(profileImagePath: path);
+    await _saveUserData();
+    notifyListeners();
+  }
+
+  WorkoutType workoutTypeForExercise(Exercise exercise) {
+    return _workoutTypes.firstWhere(
+      (type) => type.id == exercise.typeId,
+      orElse: () => WorkoutRepository.workoutTypeById(exercise.typeId),
+    );
+  }
+
+  double _calculateCalories(WorkoutSession session) {
+    final exercise = _findMatchingExercise(session.workoutId);
+    final type = exercise == null
+        ? WorkoutRepository.workoutTypeById('push_up')
+        : workoutTypeForExercise(exercise);
+    final performedSeconds =
+        session.repsCompleted * type.secondsPerRep +
+        (session.setsCompleted * 20);
+    final elapsedSeconds = (session.endedAt ?? DateTime.now())
+        .difference(session.startedAt)
+        .inSeconds
+        .clamp(0, 7200);
+    final activeSeconds = performedSeconds > 0
+        ? performedSeconds
+        : elapsedSeconds.toDouble();
+    final minutes = (activeSeconds / 60).clamp(0.05, 240).toDouble();
+    return type.metValue * 3.5 * _data.bodyWeightKg / 200 * minutes;
   }
 
   Future<void> _saveUserData() async {

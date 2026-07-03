@@ -9,6 +9,7 @@ class WorkoutSession {
     required this.repsCompleted,
     required this.setsCompleted,
     required this.formScore,
+    required this.caloriesBurned,
     required this.coachSummary,
     this.endedAt,
   });
@@ -23,6 +24,7 @@ class WorkoutSession {
   final int repsCompleted;
   final int setsCompleted;
   final int formScore;
+  final double caloriesBurned;
   final String coachSummary;
 
   bool get isComplete => endedAt != null;
@@ -38,6 +40,7 @@ class WorkoutSession {
     int? repsCompleted,
     int? setsCompleted,
     int? formScore,
+    double? caloriesBurned,
     String? coachSummary,
   }) {
     return WorkoutSession(
@@ -53,6 +56,7 @@ class WorkoutSession {
       repsCompleted: repsCompleted ?? this.repsCompleted,
       setsCompleted: setsCompleted ?? this.setsCompleted,
       formScore: formScore ?? this.formScore,
+      caloriesBurned: caloriesBurned ?? this.caloriesBurned,
       coachSummary: coachSummary ?? this.coachSummary,
     );
   }
@@ -71,6 +75,7 @@ class WorkoutSession {
       repsCompleted: json['repsCompleted'] as int? ?? 0,
       setsCompleted: json['setsCompleted'] as int? ?? 0,
       formScore: json['formScore'] as int? ?? 0,
+      caloriesBurned: (json['caloriesBurned'] as num?)?.toDouble() ?? 0,
       coachSummary: json['coachSummary'] as String? ?? '',
     );
   }
@@ -87,6 +92,7 @@ class WorkoutSession {
       'repsCompleted': repsCompleted,
       'setsCompleted': setsCompleted,
       'formScore': formScore,
+      'caloriesBurned': caloriesBurned,
       'coachSummary': coachSummary,
     };
   }
