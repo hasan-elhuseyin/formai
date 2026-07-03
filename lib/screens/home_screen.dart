@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -42,7 +43,15 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
-        const Positioned(top: 0, left: 0, right: 0, child: _HomeTopBar()),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: _HomeTopBar(
+            imagePath: appState.profileImagePath,
+            initials: appState.currentUser?.initials ?? 'AI',
+          ),
+        ),
         Positioned(
           right: 24,
           bottom: 112,
@@ -54,11 +63,16 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _HomeTopBar extends StatelessWidget {
-  const _HomeTopBar();
+  const _HomeTopBar({required this.imagePath, required this.initials});
+
+  final String? imagePath;
+  final String initials;
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
+    final imageFile = imagePath == null ? null : File(imagePath!);
+    final hasImage = imageFile != null && imageFile.existsSync();
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -73,11 +87,30 @@ class _HomeTopBar extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      'assets/images/avatar.png',
+                    child: SizedBox(
                       width: 40,
                       height: 40,
-                      fit: BoxFit.cover,
+                      child: hasImage
+                          ? Image.file(imageFile, fit: BoxFit.cover)
+                          : DecoratedBox(
+                              decoration: const BoxDecoration(
+                                color: AppColors.input,
+                                image: DecorationImage(
+                                  image: AssetImage('assets/images/avatar.png'),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    color: AppColors.lime,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(width: 12),

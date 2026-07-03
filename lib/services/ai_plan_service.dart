@@ -104,7 +104,7 @@ class AiPlanService {
     final bodyweight =
         request.equipment.toLowerCase().contains('body') ||
         request.equipment.trim().isEmpty;
-    final targetDays = request.daysPerWeek.clamp(1, 6).toInt();
+    final targetDays = request.daysPerWeek.clamp(1, 7).toInt();
     final selected = <WorkoutType>[];
 
     void add(String id) {
@@ -201,7 +201,7 @@ class AiPlanService {
 
   int? _readDays(String normalized) {
     if (normalized.contains('daily') || normalized.contains('every day')) {
-      return 6;
+      return 7;
     }
     final numeric = RegExp(r'(\d)\s*(day|x|times)').firstMatch(normalized);
     if (numeric != null) {
@@ -214,6 +214,7 @@ class AiPlanService {
       'four': 4,
       'five': 5,
       'six': 6,
+      'seven': 7,
     };
     for (final entry in words.entries) {
       if (normalized.contains('${entry.key} day')) {
@@ -230,7 +231,8 @@ class AiPlanService {
       3 => const [1, 3, 5],
       4 => const [1, 2, 4, 6],
       5 => const [1, 2, 3, 5, 6],
-      _ => const [1, 2, 3, 4, 5, 6],
+      6 => const [1, 2, 3, 4, 5, 6],
+      _ => const [1, 2, 3, 4, 5, 6, 7],
     };
   }
 }

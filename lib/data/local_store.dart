@@ -180,4 +180,9 @@ class LocalStore {
       jsonEncode(data.toJson()),
     );
   }
+
+  Future<void> deleteUserData(String userId) async {
+    await init();
+    await _prefs!.remove('$_userDataPrefix$userId');
+  }
 }

@@ -12,6 +12,7 @@ import '../models/exercise.dart';
 import '../models/workout_session.dart';
 import '../models/workout_type.dart';
 import '../services/ai_plan_service.dart';
+import '../services/notification_service.dart';
 import '../services/pose_workout_analyzer.dart';
 
 class AuthResult {
@@ -22,13 +23,16 @@ class AuthResult {
 }
 
 class AppState extends ChangeNotifier {
-  AppState({LocalStore? store})
+  AppState({LocalStore? store, NotificationService? notificationService})
     : _store = store ?? LocalStore(),
+      _notificationService =
+          notificationService ?? NotificationService.instance,
       _workoutTypes = WorkoutRepository.workoutTypes {
     _load();
   }
 
   final LocalStore _store;
+  final NotificationService _notificationService;
   final List<WorkoutType> _workoutTypes;
   final AiPlanService _planService = const AiPlanService();
   final Uuid _uuid = const Uuid();
@@ -110,6 +114,9 @@ class AppState extends ChangeNotifier {
           _selectedExercise = _data.workouts.isEmpty
               ? null
               : _data.workouts.first;
+          _runNotificationTask(
+            () => _notificationService.rescheduleAll(_data.workouts),
+          );
         } else {
           await _store.saveCurrentUserId(null);
         }
@@ -153,6 +160,9 @@ class AppState extends ChangeNotifier {
     _activeSession = null;
     _selectedTab = 0;
     await _store.saveCurrentUserId(account.user.id);
+    _runNotificationTask(
+      () => _notificationService.rescheduleAll(_data.workouts),
+    );
     notifyListeners();
     return AuthResult(
       success: true,
@@ -226,11 +236,13 @@ class AppState extends ChangeNotifier {
     await _store.saveAccounts(_accounts);
     await _store.saveUserData(user.id, _data);
     await _store.saveCurrentUserId(user.id);
+    _runNotificationTask(_notificationService.cancelAllWorkoutReminders);
     notifyListeners();
     return const AuthResult(success: true, message: 'Account created.');
   }
 
   Future<void> signOut() async {
+    _runNotificationTask(_notificationService.cancelAllWorkoutReminders);
     _currentUser = null;
     _selectedExercise = null;
     _activeSession = null;
@@ -238,6 +250,33 @@ class AppState extends ChangeNotifier {
     _selectedTab = 0;
     await _store.saveCurrentUserId(null);
     notifyListeners();
+  }
+
+  Future<AuthResult> deleteAccount() async {
+    final user = _currentUser;
+    if (user == null) {
+      return const AuthResult(
+        success: false,
+        message: 'No signed-in account to delete.',
+      );
+    }
+
+    _runNotificationTask(_notificationService.cancelAllWorkoutReminders);
+    _accounts = [
+      for (final account in _accounts)
+        if (account.user.id != user.id) account,
+    ];
+    await _store.saveAccounts(_accounts);
+    await _store.deleteUserData(user.id);
+    await _store.saveCurrentUserId(null);
+
+    _currentUser = null;
+    _selectedExercise = null;
+    _activeSession = null;
+    _data = UserData.empty();
+    _selectedTab = 0;
+    notifyListeners();
+    return const AuthResult(success: true, message: 'Account deleted.');
   }
 
   void selectTab(int index) {
@@ -284,6 +323,25 @@ class AppState extends ChangeNotifier {
         .toList(growable: false);
   }
 
+  List<Exercise> workoutsForDate(DateTime date, {String query = ''}) {
+    final normalized = query.trim().toLowerCase();
+    return _data.workouts
+        .where((exercise) {
+          final matchesDate = exercise.scheduleDays.isEmpty
+              ? _sameDate(exercise.createdAt, date)
+              : exercise.scheduleDays.contains(date.weekday);
+          if (!matchesDate) {
+            return false;
+          }
+          if (normalized.isEmpty) {
+            return true;
+          }
+          return exercise.name.toLowerCase().contains(normalized) ||
+              exercise.category.toLowerCase().contains(normalized);
+        })
+        .toList(growable: false);
+  }
+
   Future<void> addWorkout({
     required WorkoutType type,
     required int repGoal,
@@ -323,6 +381,68 @@ class AppState extends ChangeNotifier {
     _data = _data.copyWith(workouts: [..._data.workouts, workout]);
     _selectedExercise = workout;
     await _saveUserData();
+    _runNotificationTask(
+      () => _notificationService.scheduleWorkoutReminder(workout),
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateWorkout({
+    required String workoutId,
+    required int repGoal,
+    required int setGoal,
+    required String? reminderTime,
+    required List<int> scheduleDays,
+  }) async {
+    final user = _currentUser;
+    final existing = _findMatchingExercise(workoutId);
+    if (user == null || existing == null) {
+      return;
+    }
+
+    final cleanedReminder = reminderTime?.trim();
+    final updated = existing.copyWith(
+      repGoal: repGoal.clamp(1, 120).toInt(),
+      setGoal: setGoal.clamp(1, 8).toInt(),
+      reminderTime: cleanedReminder == null || cleanedReminder.isEmpty
+          ? null
+          : cleanedReminder,
+      scheduleDays: _cleanScheduleDays(scheduleDays),
+      updatedAt: DateTime.now(),
+    );
+    _replaceWorkout(updated);
+    if (_selectedExercise?.id == updated.id) {
+      _selectedExercise = updated;
+    }
+    await _saveUserData();
+    _runNotificationTask(
+      () => _notificationService.scheduleWorkoutReminder(updated),
+    );
+    notifyListeners();
+  }
+
+  Future<void> deleteWorkout(String workoutId) async {
+    final user = _currentUser;
+    if (user == null) {
+      return;
+    }
+
+    _data = _data.copyWith(
+      workouts: [
+        for (final workout in _data.workouts)
+          if (workout.id != workoutId) workout,
+      ],
+    );
+    if (_selectedExercise?.id == workoutId) {
+      _selectedExercise = _data.workouts.isEmpty ? null : _data.workouts.first;
+    }
+    if (_activeSession?.workoutId == workoutId) {
+      _activeSession = null;
+    }
+    await _saveUserData();
+    _runNotificationTask(
+      () => _notificationService.cancelWorkoutReminder(workoutId),
+    );
     notifyListeners();
   }
 
@@ -545,6 +665,28 @@ class AppState extends ChangeNotifier {
           if (workout.id == updated.id) updated else workout,
       ],
     );
+  }
+
+  void _runNotificationTask(Future<void> Function() task) {
+    Future<void>.sync(task).catchError((Object error, StackTrace stackTrace) {
+      if (kDebugMode) {
+        debugPrint('Notification task failed: $error');
+      }
+    });
+  }
+
+  bool _sameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  List<int> _cleanScheduleDays(List<int> days) {
+    final cleaned =
+        days
+            .where((day) => day >= DateTime.monday && day <= DateTime.sunday)
+            .toSet()
+            .toList()
+          ..sort();
+    return cleaned;
   }
 
   Exercise? _findMatchingExercise(String id) {

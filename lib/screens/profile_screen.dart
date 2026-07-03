@@ -125,6 +125,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.logout,
                   onPressed: appState.signOut,
                 ),
+                const SizedBox(height: 12),
+                _DangerButton(
+                  label: 'DELETE MY ACCOUNT',
+                  icon: Icons.delete_forever_outlined,
+                  onPressed: _deleteAccount,
+                ),
               ],
             ),
           ),
@@ -183,6 +189,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       );
+  }
+
+  Future<void> _deleteAccount() async {
+    final appState = AppScope.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: const Text(
+            'Delete account?',
+            style: TextStyle(
+              color: AppColors.text,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: const Text(
+            'This removes your account, saved workouts, stats, profile picture link, and workout reminders from this device.',
+            style: TextStyle(color: AppColors.muted),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('CANCEL'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.alert),
+              child: const Text('DELETE'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await appState.deleteAccount();
   }
 }
 
@@ -572,6 +616,54 @@ class _ProfileSwitch extends StatelessWidget {
             onChanged: onChanged,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DangerButton extends StatelessWidget {
+  const _DangerButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.alert.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onPressed,
+        child: SizedBox(
+          height: 52,
+          width: double.infinity,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: AppColors.alert, size: 18),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.alert,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

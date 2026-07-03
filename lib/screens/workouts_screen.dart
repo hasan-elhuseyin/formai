@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../models/exercise.dart';
 import '../models/workout_type.dart';
@@ -33,6 +34,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   String _coachReply =
       'Tell me your goal, training days, and equipment. I will shape it into a trackable plan.';
   bool _isGenerating = false;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void dispose() {
@@ -46,9 +48,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = AppScope.of(context);
-    final planned = appState.filterExercises(_searchController.text);
-    final catalog = appState.filterWorkoutTypes(_searchController.text);
+    final planned = appState.workoutsForDate(
+      _selectedDate,
+      query: _searchController.text,
+    );
     final topInset = MediaQuery.paddingOf(context).top;
+    final selectedTitle = _isToday(_selectedDate)
+        ? "Today's Workout"
+        : _formatDateTitle(_selectedDate);
 
     return Stack(
       children: [
@@ -90,53 +97,68 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   onSendMessage: _sendCoachMessage,
                 ),
                 const SizedBox(height: 28),
+                _PlanCalendarPanel(
+                  selectedDate: _selectedDate,
+                  workoutsForDate: appState.workoutsForDate,
+                  onDateSelected: (date) {
+                    setState(() => _selectedDate = _dateOnly(date));
+                  },
+                  onPickDate: _pickDate,
+                ),
+                const SizedBox(height: 18),
+                LimeButton(
+                  label: 'MOVEMENT LIBRARY',
+                  icon: Icons.library_add_outlined,
+                  onPressed: () => _showMovementLibrarySheet(
+                    context,
+                    scheduledDate: _selectedDate,
+                  ),
+                ),
+                const SizedBox(height: 28),
                 _SectionTitle(
-                  title: 'Your Plan',
-                  actionLabel: 'QUICK ADD',
-                  onAction: () => _showQuickAddSheet(context),
+                  title: selectedTitle,
+                  actionLabel: 'ADD',
+                  onAction: () => _showMovementLibrarySheet(
+                    context,
+                    scheduledDate: _selectedDate,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 if (planned.isEmpty)
-                  _EmptyPlan(onTap: () => _showQuickAddSheet(context))
+                  _EmptyPlan(
+                    message:
+                        'No workout scheduled for ${_formatShortDate(_selectedDate)}',
+                    onTap: () => _showMovementLibrarySheet(
+                      context,
+                      scheduledDate: _selectedDate,
+                    ),
+                  )
                 else
-                  GridView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: planned.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 1,
-                          mainAxisExtent: 164,
-                          mainAxisSpacing: 16,
-                        ),
-                    itemBuilder: (context, index) {
-                      return _WorkoutCard(
-                        exercise: planned[index],
-                        onTap: () => appState.openExercise(planned[index]),
-                      );
-                    },
+                  SlidableAutoCloseBehavior(
+                    child: GridView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: planned.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 1,
+                            mainAxisExtent: 164,
+                            mainAxisSpacing: 16,
+                          ),
+                      itemBuilder: (context, index) {
+                        final exercise = planned[index];
+                        return _SlidableWorkoutCard(
+                          exercise: exercise,
+                          onTap: () => appState.openExercise(exercise),
+                          onEdit: () =>
+                              _showEditWorkoutSheet(context, exercise),
+                          onDelete: () =>
+                              _confirmDeleteWorkout(context, exercise),
+                        );
+                      },
+                    ),
                   ),
-                const SizedBox(height: 28),
-                const _SectionTitle(title: 'Movement Library'),
-                const SizedBox(height: 16),
-                GridView.builder(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: catalog.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 1,
-                    mainAxisExtent: 118,
-                    mainAxisSpacing: 14,
-                  ),
-                  itemBuilder: (context, index) {
-                    return _WorkoutTypeCard(
-                      type: catalog[index],
-                      onAdd: () => _showQuickAddSheet(context, catalog[index]),
-                    );
-                  },
-                ),
               ],
             ),
           ),
@@ -217,10 +239,145 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     return 'Bodyweight';
   }
 
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.lime,
+              onPrimary: AppColors.buttonText,
+              surface: AppColors.panel,
+              onSurface: AppColors.text,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.panel,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() => _selectedDate = _dateOnly(picked));
+  }
+
+  Future<void> _showMovementLibrarySheet(
+    BuildContext context, {
+    DateTime? scheduledDate,
+  }) async {
+    final appState = AppScope.of(context);
+    final librarySearchController = TextEditingController(
+      text: _searchController.text,
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final catalog = appState.filterWorkoutTypes(
+              librarySearchController.text,
+            );
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                24,
+                24,
+                24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+              ),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Movement Library',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.text,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close, color: AppColors.slate),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      scheduledDate == null
+                          ? 'Choose a movement to add to your plan.'
+                          : 'Adding to ${_formatDateTitle(scheduledDate)}.',
+                      style: const TextStyle(
+                        color: AppColors.slate,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _SheetSearchField(
+                      controller: librarySearchController,
+                      onChanged: (_) => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: catalog.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (sheetContext, index) {
+                          final type = catalog[index];
+                          return _WorkoutTypeCard(
+                            type: type,
+                            onAdd: () {
+                              Navigator.of(sheetContext).pop();
+                              _showQuickAddSheet(
+                                context,
+                                initialType: type,
+                                scheduledDate: scheduledDate,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    librarySearchController.dispose();
+  }
+
   Future<void> _showQuickAddSheet(
-    BuildContext context, [
+    BuildContext context, {
     WorkoutType? initialType,
-  ]) async {
+    DateTime? scheduledDate,
+  }) async {
     final appState = AppScope.of(context);
     var selectedType = initialType ?? appState.workoutTypes.first;
     final repsController = TextEditingController(
@@ -230,7 +387,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       text: selectedType.defaultSetGoal.toString(),
     );
     final reminderController = TextEditingController(text: '08:00');
-    var daily = true;
+    var daily = scheduledDate == null;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -262,6 +419,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
+                  if (scheduledDate != null) ...[
+                    _SelectedDatePill(date: scheduledDate),
+                    const SizedBox(height: 12),
+                  ],
                   _SelectBox<WorkoutType>(
                     value: selectedType,
                     values: appState.workoutTypes,
@@ -336,7 +497,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         reminderTime: reminderController.text.trim().isEmpty
                             ? null
                             : reminderController.text.trim(),
-                        scheduleDays: daily
+                        scheduleDays: scheduledDate != null && !daily
+                            ? [scheduledDate.weekday]
+                            : daily
                             ? const [1, 2, 3, 4, 5, 6, 7]
                             : const [],
                         planNote:
@@ -358,6 +521,167 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     repsController.dispose();
     setsController.dispose();
     reminderController.dispose();
+  }
+
+  Future<void> _showEditWorkoutSheet(
+    BuildContext context,
+    Exercise exercise,
+  ) async {
+    final appState = AppScope.of(context);
+    final repsController = TextEditingController(
+      text: exercise.repGoal.toString(),
+    );
+    final setsController = TextEditingController(
+      text: exercise.setGoal.toString(),
+    );
+    final reminderController = TextEditingController(
+      text: exercise.reminderTime ?? '',
+    );
+    final selectedDays = exercise.scheduleDays.toSet();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                24,
+                24,
+                24 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Edit ${exercise.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SheetInput(
+                          controller: repsController,
+                          label: 'REPS',
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _SheetInput(
+                          controller: setsController,
+                          label: 'SETS',
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _SheetInput(
+                    controller: reminderController,
+                    label: 'REMINDER TIME',
+                    keyboardType: TextInputType.datetime,
+                  ),
+                  const SizedBox(height: 16),
+                  _DaySelector(
+                    selectedDays: selectedDays,
+                    onToggle: (day) {
+                      setSheetState(() {
+                        if (selectedDays.contains(day)) {
+                          selectedDays.remove(day);
+                        } else {
+                          selectedDays.add(day);
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  LimeButton(
+                    label: 'SAVE CHANGES',
+                    icon: Icons.check,
+                    onPressed: () async {
+                      final reps =
+                          int.tryParse(repsController.text) ?? exercise.repGoal;
+                      final sets =
+                          int.tryParse(setsController.text) ?? exercise.setGoal;
+                      await appState.updateWorkout(
+                        workoutId: exercise.id,
+                        repGoal: reps,
+                        setGoal: sets,
+                        reminderTime: reminderController.text,
+                        scheduleDays: selectedDays.toList(),
+                      );
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    repsController.dispose();
+    setsController.dispose();
+    reminderController.dispose();
+  }
+
+  Future<void> _confirmDeleteWorkout(
+    BuildContext context,
+    Exercise exercise,
+  ) async {
+    final appState = AppScope.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: const Text(
+            'Delete workout?',
+            style: TextStyle(
+              color: AppColors.text,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: Text(
+            'Remove ${exercise.name} from your plan and cancel its reminders.',
+            style: const TextStyle(color: AppColors.muted),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('CANCEL'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.alert),
+              child: const Text('DELETE'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    await appState.deleteWorkout(exercise.id);
   }
 }
 
@@ -415,6 +739,231 @@ class _WorkoutsHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PlanCalendarPanel extends StatelessWidget {
+  const _PlanCalendarPanel({
+    required this.selectedDate,
+    required this.workoutsForDate,
+    required this.onDateSelected,
+    required this.onPickDate,
+  });
+
+  final DateTime selectedDate;
+  final List<Exercise> Function(DateTime date, {String query}) workoutsForDate;
+  final ValueChanged<DateTime> onDateSelected;
+  final VoidCallback onPickDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final monthStart = DateTime(selectedDate.year, selectedDate.month);
+    final gridStart = monthStart.subtract(
+      Duration(days: monthStart.weekday - DateTime.monday),
+    );
+    final days = List<DateTime>.generate(
+      42,
+      (index) => _dateOnly(gridStart.add(Duration(days: index))),
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'PLAN CALENDAR',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Previous month',
+                onPressed: () => onDateSelected(
+                  DateTime(selectedDate.year, selectedDate.month - 1, 1),
+                ),
+                icon: const Icon(Icons.chevron_left, color: AppColors.slate),
+              ),
+              TextButton.icon(
+                onPressed: onPickDate,
+                style: TextButton.styleFrom(foregroundColor: AppColors.text),
+                icon: const Icon(Icons.calendar_month, size: 16),
+                label: Text(
+                  '${_monthName(selectedDate.month)} ${selectedDate.year}',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Next month',
+                onPressed: () => onDateSelected(
+                  DateTime(selectedDate.year, selectedDate.month + 1, 1),
+                ),
+                icon: const Icon(Icons.chevron_right, color: AppColors.slate),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Row(
+            children: [
+              _WeekdayLabel(label: 'M'),
+              _WeekdayLabel(label: 'T'),
+              _WeekdayLabel(label: 'W'),
+              _WeekdayLabel(label: 'T'),
+              _WeekdayLabel(label: 'F'),
+              _WeekdayLabel(label: 'S'),
+              _WeekdayLabel(label: 'S'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: days.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              childAspectRatio: 0.82,
+            ),
+            itemBuilder: (context, index) {
+              final date = days[index];
+              final count = workoutsForDate(date).length;
+              final selected = _sameDate(date, selectedDate);
+              final today = _isToday(date);
+              final inMonth = date.month == selectedDate.month;
+              return _CalendarDay(
+                date: date,
+                count: count,
+                selected: selected,
+                today: today,
+                inMonth: inMonth,
+                onTap: () => onDateSelected(date),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekdayLabel extends StatelessWidget {
+  const _WeekdayLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.slate,
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalendarDay extends StatelessWidget {
+  const _CalendarDay({
+    required this.date,
+    required this.count,
+    required this.selected,
+    required this.today,
+    required this.inMonth,
+    required this.onTap,
+  });
+
+  final DateTime date;
+  final int count;
+  final bool selected;
+  final bool today;
+  final bool inMonth;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = selected
+        ? AppColors.buttonText
+        : inMonth
+        ? AppColors.text
+        : AppColors.slate.withValues(alpha: 0.45);
+    return Material(
+      color: selected
+          ? AppColors.lime
+          : today
+          ? AppColors.lime.withValues(alpha: 0.12)
+          : AppColors.input,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${date.day}',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              SizedBox(
+                height: 14,
+                child: count == 0
+                    ? const SizedBox.shrink()
+                    : Container(
+                        constraints: const BoxConstraints(minWidth: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.buttonText.withValues(alpha: 0.18)
+                              : AppColors.lime.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            color: selected
+                                ? AppColors.buttonText
+                                : AppColors.lime,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -524,7 +1073,7 @@ class _PlanBuilderPanel extends StatelessWidget {
               Expanded(
                 child: _SelectBox<int>(
                   value: daysPerWeek,
-                  values: const [1, 2, 3, 4, 5, 6],
+                  values: const [1, 2, 3, 4, 5, 6, 7],
                   labelBuilder: (value) => '$value days/week',
                   onChanged: (value) {
                     if (value != null) {
@@ -836,8 +1385,9 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _EmptyPlan extends StatelessWidget {
-  const _EmptyPlan({required this.onTap});
+  const _EmptyPlan({required this.message, required this.onTap});
 
+  final String message;
   final VoidCallback onTap;
 
   @override
@@ -848,14 +1398,14 @@ class _EmptyPlan extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        child: const SizedBox(
+        child: SizedBox(
           height: 118,
           width: double.infinity,
           child: Center(
             child: Text(
-              'Add a simple workout or generate an AI plan',
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.muted,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -863,6 +1413,51 @@ class _EmptyPlan extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SlidableWorkoutCard extends StatelessWidget {
+  const _SlidableWorkoutCard({
+    required this.exercise,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Exercise exercise;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Slidable(
+        key: ValueKey(exercise.id),
+        endActionPane: ActionPane(
+          motion: const StretchMotion(),
+          extentRatio: 0.44,
+          children: [
+            SlidableAction(
+              onPressed: (_) => onEdit(),
+              backgroundColor: AppColors.lime,
+              foregroundColor: AppColors.buttonText,
+              icon: Icons.edit_outlined,
+              label: 'Edit',
+            ),
+            SlidableAction(
+              onPressed: (_) => onDelete(),
+              backgroundColor: AppColors.alert,
+              foregroundColor: const Color(0xFF35110E),
+              icon: Icons.delete_outline,
+              label: 'Delete',
+            ),
+          ],
+        ),
+        child: _WorkoutCard(exercise: exercise, onTap: onTap),
       ),
     );
   }
@@ -1058,6 +1653,140 @@ class _WorkoutTypeCard extends StatelessWidget {
   }
 }
 
+class _SheetSearchField extends StatelessWidget {
+  const _SheetSearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: AppColors.input,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        cursorColor: AppColors.lime,
+        style: const TextStyle(color: AppColors.text, fontSize: 15),
+        decoration: const InputDecoration(
+          icon: Icon(Icons.search, color: AppColors.slate, size: 19),
+          hintText: 'Search movement',
+          hintStyle: TextStyle(color: AppColors.slate),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedDatePill extends StatelessWidget {
+  const _SelectedDatePill({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.lime.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.lime.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_available_outlined,
+            color: AppColors.lime,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Scheduled for ${_formatDateTitle(date)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DaySelector extends StatelessWidget {
+  const _DaySelector({required this.selectedDays, required this.onToggle});
+
+  final Set<int> selectedDays;
+  final ValueChanged<int> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = {
+      DateTime.monday: 'Mon',
+      DateTime.tuesday: 'Tue',
+      DateTime.wednesday: 'Wed',
+      DateTime.thursday: 'Thu',
+      DateTime.friday: 'Fri',
+      DateTime.saturday: 'Sat',
+      DateTime.sunday: 'Sun',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'DAYS',
+          style: TextStyle(
+            color: AppColors.slate,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in labels.entries)
+              FilterChip(
+                selected: selectedDays.contains(entry.key),
+                label: Text(entry.value),
+                labelStyle: TextStyle(
+                  color: selectedDays.contains(entry.key)
+                      ? AppColors.buttonText
+                      : AppColors.text,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+                selectedColor: AppColors.lime,
+                backgroundColor: AppColors.input,
+                checkmarkColor: AppColors.buttonText,
+                side: BorderSide(
+                  color: selectedDays.contains(entry.key)
+                      ? AppColors.lime
+                      : Colors.white.withValues(alpha: 0.06),
+                ),
+                onSelected: (_) => onToggle(entry.key),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _SheetInput extends StatelessWidget {
   const _SheetInput({
     required this.controller,
@@ -1102,4 +1831,49 @@ class _SheetInput extends StatelessWidget {
       ],
     );
   }
+}
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+bool _sameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+bool _isToday(DateTime date) => _sameDate(date, DateTime.now());
+
+String _formatDateTitle(DateTime date) {
+  return '${_weekdayName(date.weekday)}, ${_monthName(date.month)} ${date.day}';
+}
+
+String _formatShortDate(DateTime date) {
+  return '${_monthName(date.month)} ${date.day}';
+}
+
+String _weekdayName(int weekday) {
+  return switch (weekday) {
+    DateTime.monday => 'Monday',
+    DateTime.tuesday => 'Tuesday',
+    DateTime.wednesday => 'Wednesday',
+    DateTime.thursday => 'Thursday',
+    DateTime.friday => 'Friday',
+    DateTime.saturday => 'Saturday',
+    _ => 'Sunday',
+  };
+}
+
+String _monthName(int month) {
+  return switch (month) {
+    DateTime.january => 'January',
+    DateTime.february => 'February',
+    DateTime.march => 'March',
+    DateTime.april => 'April',
+    DateTime.may => 'May',
+    DateTime.june => 'June',
+    DateTime.july => 'July',
+    DateTime.august => 'August',
+    DateTime.september => 'September',
+    DateTime.october => 'October',
+    DateTime.november => 'November',
+    _ => 'December',
+  };
 }

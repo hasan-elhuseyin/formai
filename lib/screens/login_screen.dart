@@ -42,79 +42,75 @@ class _LoginScreenState extends State<LoginScreen> {
     return PhoneFrame(
       child: Scaffold(
         resizeToAvoidBottomInset: false,
-        body: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: FocusScope.of(context).unfocus,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              const _LoginBackdrop(),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final topInset = MediaQuery.paddingOf(context).top;
-                  return ClipRect(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.topCenter,
-                      child: SizedBox(
-                        width: constraints.maxWidth,
-                        height: _isSignUp ? 1040 : 970,
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            24,
-                            topInset + (_isSignUp ? 42 : 70),
-                            24,
-                            32,
-                          ),
-                          child: Column(
-                            children: [
-                              const _HeaderLogo(),
-                              SizedBox(height: _isSignUp ? 28 : 48),
-                              _TitleSection(isSignUp: _isSignUp),
-                              SizedBox(height: _isSignUp ? 28 : 48),
-                              _AuthForm(
-                                mode: _mode,
-                                nameController: _nameController,
-                                emailController: _emailController,
-                                passwordController: _passwordController,
-                                confirmPasswordController:
-                                    _confirmPasswordController,
-                                obscurePassword: _obscurePassword,
-                                isSubmitting: _isSubmitting,
-                                onTogglePassword: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                                onSubmit: _submit,
-                              ),
-                              SizedBox(height: _isSignUp ? 26 : 48),
-                              _AuthFooter(
-                                isSignUp: _isSignUp,
-                                onToggleMode: () {
-                                  setState(() {
-                                    _mode = _isSignUp
-                                        ? _AuthMode.signIn
-                                        : _AuthMode.signUp;
-                                    if (_isSignUp) {
-                                      _confirmPasswordController.text =
-                                          _passwordController.text;
-                                    }
-                                  });
-                                },
-                              ),
-                              const Spacer(),
-                              const _LegalLinks(),
-                            ],
-                          ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const _LoginBackdrop(),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final topInset = MediaQuery.paddingOf(context).top;
+                return ClipRect(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      height: _isSignUp ? 1040 : 970,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          topInset + (_isSignUp ? 42 : 70),
+                          24,
+                          32,
+                        ),
+                        child: Column(
+                          children: [
+                            const _HeaderLogo(),
+                            SizedBox(height: _isSignUp ? 28 : 48),
+                            _TitleSection(isSignUp: _isSignUp),
+                            SizedBox(height: _isSignUp ? 28 : 48),
+                            _AuthForm(
+                              mode: _mode,
+                              nameController: _nameController,
+                              emailController: _emailController,
+                              passwordController: _passwordController,
+                              confirmPasswordController:
+                                  _confirmPasswordController,
+                              obscurePassword: _obscurePassword,
+                              isSubmitting: _isSubmitting,
+                              onTogglePassword: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                              onSubmit: _submit,
+                            ),
+                            SizedBox(height: _isSignUp ? 26 : 48),
+                            _AuthFooter(
+                              isSignUp: _isSignUp,
+                              onToggleMode: () {
+                                setState(() {
+                                  _mode = _isSignUp
+                                      ? _AuthMode.signIn
+                                      : _AuthMode.signUp;
+                                  if (_isSignUp) {
+                                    _confirmPasswordController.text =
+                                        _passwordController.text;
+                                  }
+                                });
+                              },
+                            ),
+                            const Spacer(),
+                            const _LegalLinks(),
+                          ],
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -387,6 +383,7 @@ class _PlainTextField extends StatelessWidget {
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
       onSubmitted: onSubmitted,
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       cursorColor: AppColors.lime,
       style: const TextStyle(color: AppColors.text, fontSize: 16),
       decoration: InputDecoration(

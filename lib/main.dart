@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'screens/app_shell.dart';
 import 'screens/login_screen.dart';
+import 'services/notification_service.dart';
 import 'state/app_scope.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.initialize();
   runApp(const FormaiApp());
 }
 

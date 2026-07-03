@@ -80,9 +80,10 @@ void main() {
     await tester.tap(find.text('GENERATE AI PLAN'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Your Plan'), findsOneWidget);
+    expect(find.text('PLAN CALENDAR'), findsOneWidget);
+    expect(find.text("Today's Workout"), findsOneWidget);
     expect(find.textContaining('Plan saved with'), findsOneWidget);
-    expect(find.text('Push-Up'), findsWidgets);
+    expect(find.text('MOVEMENT LIBRARY'), findsOneWidget);
   });
 }
 
