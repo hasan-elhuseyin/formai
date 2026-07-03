@@ -37,11 +37,27 @@ class _FormaiAppState extends State<FormaiApp> {
             debugShowCheckedModeBanner: false,
             title: 'FORMAI',
             theme: AppTheme.dark,
-            home: _appState.isAuthenticated
+            home: !_appState.isReady
+                ? const _StartupScreen()
+                : _appState.isAuthenticated
                 ? const AppShell()
                 : const LoginScreen(),
           );
         },
+      ),
+    );
+  }
+}
+
+class _StartupScreen extends StatelessWidget {
+  const _StartupScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: CircularProgressIndicator(color: AppColors.lime, strokeWidth: 2),
       ),
     );
   }

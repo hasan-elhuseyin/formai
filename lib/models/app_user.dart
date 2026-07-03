@@ -1,8 +1,15 @@
 class AppUser {
-  const AppUser({required this.name, required this.email});
+  const AppUser({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.createdAt,
+  });
 
+  final String id;
   final String name;
   final String email;
+  final DateTime createdAt;
 
   String get initials {
     final parts = name
@@ -18,5 +25,37 @@ class AppUser {
       return part.substring(0, part.length < 2 ? part.length : 2).toUpperCase();
     }
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  AppUser copyWith({
+    String? id,
+    String? name,
+    String? email,
+    DateTime? createdAt,
+  }) {
+    return AppUser(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  factory AppUser.fromJson(Map<String, Object?> json) {
+    return AppUser(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      email: json['email'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'createdAt': createdAt.toIso8601String(),
+    };
   }
 }

@@ -84,10 +84,15 @@ class ProfileScreen extends StatelessWidget {
                     Expanded(
                       child: _ProfileMetric(
                         value: '${appState.totalSetCount}',
-                        label: 'REPS',
+                        label: 'SETS',
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                _ProfileMetric(
+                  value: '${appState.totalRepCount}',
+                  label: 'TOTAL REPS',
                 ),
                 const SizedBox(height: 24),
                 _ProfileSwitch(
@@ -185,6 +190,7 @@ class _ProfileMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       height: 118,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(

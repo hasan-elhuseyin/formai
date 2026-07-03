@@ -13,20 +13,23 @@ class LimeButton extends StatelessWidget {
   });
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final IconData? icon;
   final double height;
   final double fontSize;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onPressed != null;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFB8F56B), AppColors.lime],
+          colors: enabled
+              ? const [Color(0xFFB8F56B), AppColors.lime]
+              : const [AppColors.glass, AppColors.panel],
         ),
         boxShadow: [
           BoxShadow(

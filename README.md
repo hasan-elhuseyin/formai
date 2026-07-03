@@ -1,30 +1,35 @@
 # FORMAI
 
-FORMAI is a Flutter app for an AI fitness coach. It includes local sign-in/sign-up, a working tab shell, workout browsing, profile controls, live camera preview for the AI Coach screen, and real-time form-feedback simulation.
+FORMAI is a Flutter fitness coach app with local accounts, user-owned workout
+plans, saved session stats, AI-assisted plan creation, and live camera pose
+analysis through Google ML Kit.
 
-The UI follows the supplied Figma design for:
+## What Works
 
-- Sign in / sign up
-- Home / training dashboard
-- Workouts
-- AI analysis session
-- Profile
+- Real local sign-up and sign-in with salted password hashes in device storage.
+- No seeded account, seeded progress, or default demo workout data.
+- User-scoped workout plans, reminders, rep/set targets, preferences, and saved
+  session history.
+- Built-in movement catalog for push-up, squat, pull-up, deadlift, lunge, plank,
+  and shoulder press.
+- AI-style plan builder and coach discussion flow that generates trackable
+  workouts from the user's goal, experience, schedule, and equipment.
+- Live camera frame processing with `google_mlkit_pose_detection`.
+- Workout-specific landmark analysis for rep counting and form feedback.
 
 ## Flutter Version
 
 - Flutter 3.41.4 stable
 - Dart 3.11.1
 
-## Project Notes
+## Native Notes
 
-- The app uses Flutter Material widgets plus the official `camera` plugin for live camera preview.
-- Sign in and sign up are functional with an in-memory local account store.
-- Default demo login: `matt@formai.app` / `formai24`.
-- The auth screen is intentionally non-scrollable and Android is configured with `adjustNothing` so keyboard display does not resize/zoom the background.
-- AI movement scoring is local simulated feedback layered over the live camera preview.
-- Exercise data is modeled from a local JSON-like source using `fromJson` and `toJson`.
-- Bottom navigation uses a real tab shell: Home, Workouts, AI Coach, and Profile all work.
-- The exercise routine uses `GridView.builder` with a single-column layout to preserve the Figma list design.
+- Android uses `camera` stream frames in `ImageFormatGroup.nv21`.
+- iOS uses `ImageFormatGroup.bgra8888`.
+- Google ML Kit requires iOS deployment target 15.5 or newer.
+- On Apple Silicon with iOS 26+ simulator targets, Google ML Kit currently
+  reports missing arm64 simulator slices. Device builds work; simulator support
+  depends on the native ML Kit pods.
 
 ## Run
 
@@ -38,6 +43,8 @@ flutter run
 ```sh
 flutter analyze
 flutter test
+flutter build apk --debug
+flutter build ios --no-codesign
 ```
 
 ## Structure
@@ -45,10 +52,13 @@ flutter test
 ```text
 lib/
   data/
+    local_store.dart
     workout_repository.dart
   models/
     app_user.dart
     exercise.dart
+    workout_session.dart
+    workout_type.dart
   screens/
     analysis_screen.dart
     app_shell.dart
@@ -56,34 +66,25 @@ lib/
     login_screen.dart
     profile_screen.dart
     workouts_screen.dart
+  services/
+    ai_plan_service.dart
+    camera_input_image.dart
+    pose_workout_analyzer.dart
   state/
     app_scope.dart
     app_state.dart
   theme/
-    app_theme.dart
   widgets/
-    app_logo.dart
-    bottom_coach_nav.dart
-    glass_panel.dart
-    lime_button.dart
-    phone_frame.dart
   main.dart
 assets/
   fonts/
   images/
 ```
 
-## Screenshots
+## App Flow
 
-Capture screenshots after launching on an emulator or device:
-
-```sh
-flutter run
-```
-
-The implemented screens are available through the normal app flow:
-
-1. Start at the login screen.
-2. Use the default credentials or create a new account.
-3. Use the bottom navigation to move between Home, Workouts, AI Coach, and Profile.
-4. Tap a workout to select it for AI Coach analysis.
+1. Create an account from the login screen.
+2. Build a plan in Workouts with the AI plan builder or Quick Add.
+3. Open a saved workout to start AI Coach analysis.
+4. Allow camera access and keep the full body in frame.
+5. Pause analysis to save the session and update stats.

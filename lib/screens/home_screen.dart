@@ -32,7 +32,8 @@ class HomeScreen extends StatelessWidget {
                 _WeeklyStatsCard(
                   workouts: appState.completedWorkoutCount,
                   sets: appState.totalSetCount,
-                  totalWeightKg: appState.totalWeightKg,
+                  totalReps: appState.totalRepCount,
+                  formScore: appState.averageFormScore,
                 ),
                 const SizedBox(height: 32),
                 _ExerciseSection(exercises: exercises),
@@ -44,9 +45,7 @@ class HomeScreen extends StatelessWidget {
         Positioned(
           right: 24,
           bottom: 112,
-          child: _FloatingAddButton(
-            onTap: () => appState.openExercise(exercises.first),
-          ),
+          child: _FloatingAddButton(onTap: () => appState.selectTab(1)),
         ),
       ],
     );
@@ -130,12 +129,14 @@ class _WeeklyStatsCard extends StatelessWidget {
   const _WeeklyStatsCard({
     required this.workouts,
     required this.sets,
-    required this.totalWeightKg,
+    required this.totalReps,
+    required this.formScore,
   });
 
   final int workouts;
   final int sets;
-  final int totalWeightKg;
+  final int totalReps;
+  final int formScore;
 
   @override
   Widget build(BuildContext context) {
@@ -197,13 +198,13 @@ class _WeeklyStatsCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const ProgressRing(progress: 0.80),
+                ProgressRing(progress: formScore / 100),
               ],
             ),
             const Spacer(),
             Row(
               children: [
-                _StatPair(value: '$sets Reps', label: 'VOLUME GOAL'),
+                _StatPair(value: '$sets Sets', label: 'COMPLETED'),
                 const SizedBox(width: 32),
                 const SizedBox(
                   width: 1,
@@ -213,7 +214,7 @@ class _WeeklyStatsCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 32),
-                _StatPair(value: '$totalWeightKg Kg', label: 'TOTAL WEIGHT'),
+                _StatPair(value: '$totalReps Reps', label: 'TOTAL VOLUME'),
               ],
             ),
           ],
@@ -379,25 +380,60 @@ class _ExerciseSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        GridView.builder(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: exercises.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 1,
-            mainAxisExtent: 104,
-            mainAxisSpacing: 16,
+        if (exercises.isEmpty)
+          _EmptyRoutine(onTap: () => appState.selectTab(1))
+        else
+          GridView.builder(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: exercises.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 1,
+              mainAxisExtent: 104,
+              mainAxisSpacing: 16,
+            ),
+            itemBuilder: (context, index) {
+              final exercise = exercises[index];
+              return _ExerciseCard(
+                exercise: exercise,
+                onTap: () => appState.openExercise(exercise),
+              );
+            },
           ),
-          itemBuilder: (context, index) {
-            final exercise = exercises[index];
-            return _ExerciseCard(
-              exercise: exercise,
-              onTap: () => appState.openExercise(exercise),
-            );
-          },
-        ),
       ],
+    );
+  }
+}
+
+class _EmptyRoutine extends StatelessWidget {
+  const _EmptyRoutine({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.input,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: const SizedBox(
+          height: 104,
+          width: double.infinity,
+          child: Center(
+            child: Text(
+              'Create your first workout plan',
+              style: TextStyle(
+                color: AppColors.lime,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

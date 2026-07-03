@@ -17,17 +17,14 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController(
-    text: 'matt@formai.app',
-  );
-  final TextEditingController _passwordController = TextEditingController(
-    text: 'formai24',
-  );
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
   _AuthMode _mode = _AuthMode.signIn;
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   bool get _isSignUp => _mode == _AuthMode.signUp;
 
@@ -82,6 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 confirmPasswordController:
                                     _confirmPasswordController,
                                 obscurePassword: _obscurePassword,
+                                isSubmitting: _isSubmitting,
                                 onTogglePassword: () {
                                   setState(() {
                                     _obscurePassword = !_obscurePassword;
@@ -90,9 +88,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onSubmit: _submit,
                               ),
                               SizedBox(height: _isSignUp ? 26 : 48),
-                              _SocialFooter(
+                              _AuthFooter(
                                 isSignUp: _isSignUp,
-                                onProvider: _continueWithProvider,
                                 onToggleMode: () {
                                   setState(() {
                                     _mode = _isSignUp
@@ -122,27 +119,31 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) {
+      return;
+    }
+    setState(() => _isSubmitting = true);
     final appState = AppScope.of(context);
     final result = _isSignUp
-        ? appState.signUp(
+        ? await appState.signUp(
             name: _nameController.text,
             email: _emailController.text,
             password: _passwordController.text,
             confirmPassword: _confirmPasswordController.text,
           )
-        : appState.signIn(
+        : await appState.signIn(
             email: _emailController.text,
             password: _passwordController.text,
           );
 
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isSubmitting = false);
     if (!result.success) {
       _showMessage(result.message);
     }
-  }
-
-  void _continueWithProvider(String provider) {
-    AppScope.of(context).continueWithProvider(provider);
   }
 
   void _showMessage(String message) {
@@ -265,6 +266,7 @@ class _AuthForm extends StatelessWidget {
     required this.passwordController,
     required this.confirmPasswordController,
     required this.obscurePassword,
+    required this.isSubmitting,
     required this.onTogglePassword,
     required this.onSubmit,
   });
@@ -275,6 +277,7 @@ class _AuthForm extends StatelessWidget {
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
   final bool obscurePassword;
+  final bool isSubmitting;
   final VoidCallback onTogglePassword;
   final VoidCallback onSubmit;
 
@@ -289,7 +292,7 @@ class _AuthForm extends StatelessWidget {
             label: 'FULL NAME',
             child: _PlainTextField(
               controller: nameController,
-              hintText: 'Matt Johnson',
+              hintText: 'Ava Coach',
               textInputAction: TextInputAction.next,
               textCapitalization: TextCapitalization.words,
             ),
@@ -342,25 +345,13 @@ class _AuthForm extends StatelessWidget {
               onSubmitted: (_) => onSubmit(),
             ),
           ),
-        ] else ...[
-          const SizedBox(height: 8),
-          const Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'FORGOT PASSWORD?',
-              style: TextStyle(
-                color: Color(0xCCB6F36A),
-                fontSize: 10,
-                letterSpacing: 1,
-                height: 1.5,
-              ),
-            ),
-          ),
         ],
         SizedBox(height: _isSignUp ? 26 : 40),
         LimeButton(
-          label: _isSignUp ? 'CREATE ACCOUNT' : 'START TRAINING',
-          onPressed: onSubmit,
+          label: isSubmitting
+              ? (_isSignUp ? 'CREATING ACCOUNT' : 'SIGNING IN')
+              : (_isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN'),
+          onPressed: isSubmitting ? null : onSubmit,
         ),
       ],
     );
@@ -453,15 +444,10 @@ class _LabeledInput extends StatelessWidget {
   }
 }
 
-class _SocialFooter extends StatelessWidget {
-  const _SocialFooter({
-    required this.isSignUp,
-    required this.onProvider,
-    required this.onToggleMode,
-  });
+class _AuthFooter extends StatelessWidget {
+  const _AuthFooter({required this.isSignUp, required this.onToggleMode});
 
   final bool isSignUp;
-  final ValueChanged<String> onProvider;
   final VoidCallback onToggleMode;
 
   @override
@@ -474,7 +460,7 @@ class _SocialFooter extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                isSignUp ? 'OR SIGN UP WITH' : 'OR CONTINUE WITH',
+                isSignUp ? 'LOCAL ACCOUNT' : 'PRIVATE LOCAL SIGN IN',
                 style: const TextStyle(
                   color: Color(0x808C937F),
                   fontSize: 10,
@@ -484,24 +470,6 @@ class _SocialFooter extends StatelessWidget {
               ),
             ),
             Expanded(child: _DividerLine()),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: _SocialButton(
-                asset: 'assets/images/google.png',
-                onTap: () => onProvider('Google'),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _SocialButton(
-                asset: 'assets/images/apple.png',
-                onTap: () => onProvider('Apple'),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: 24),
@@ -545,40 +513,6 @@ class _DividerLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(height: 1, color: const Color(0x4D424938));
-  }
-}
-
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({required this.asset, required this.onTap});
-
-  final String asset;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.glass.withValues(alpha: 0.40),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Container(
-          height: 46,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0x1A424938)),
-          ),
-          child: Center(
-            child: Image.asset(
-              asset,
-              width: 20,
-              height: 20,
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
