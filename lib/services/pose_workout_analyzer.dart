@@ -47,12 +47,14 @@ class PoseWorkoutAnalyzer {
   int _repCount = 0;
   int _setCount = 0;
   _RepPhase _phase = _RepPhase.top;
+  DateTime? _lastTimedRepAt;
 
   void resetFor(Exercise exercise) {
     _workoutId = exercise.id;
     _repCount = exercise.repCount;
     _setCount = exercise.setCount;
     _phase = _RepPhase.top;
+    _lastTimedRepAt = null;
   }
 
   WorkoutAnalysisFrame analyze({
@@ -66,6 +68,7 @@ class PoseWorkoutAnalyzer {
 
     final points = _normalizedLandmarks(pose, imageSize);
     if (points.length < 8) {
+      _lastTimedRepAt = null;
       return _frame(
         exercise: exercise,
         formScore: 0,
@@ -103,6 +106,21 @@ class PoseWorkoutAnalyzer {
         points,
       ),
       TrackingProfile.benchDip => _analyzeBenchDip(exercise, pose, points),
+      TrackingProfile.dumbbellCurl => _analyzeDumbbellCurl(
+        exercise,
+        pose,
+        points,
+      ),
+      TrackingProfile.dumbbellRow => _analyzeDumbbellRow(
+        exercise,
+        pose,
+        points,
+      ),
+      TrackingProfile.lateralRaise => _analyzeLateralRaise(
+        exercise,
+        pose,
+        points,
+      ),
       TrackingProfile.generic => _analyzeGeneric(exercise, points),
     };
   }
@@ -482,6 +500,10 @@ class PoseWorkoutAnalyzer {
       if (bodyLine < 164) 18 else 0,
       if (hipsLow) 16 else 0,
     ]);
+    final repAdded = _countTimedRep(
+      exercise: exercise,
+      active: score >= 70 && !hipsLow,
+    );
 
     return _frame(
       exercise: exercise,
@@ -490,7 +512,7 @@ class PoseWorkoutAnalyzer {
       secondary: 'Hold steady. Plank time counts as reps for this plan.',
       phase: 'Hold',
       landmarks: points,
-      repAdded: false,
+      repAdded: repAdded,
       poseVisible: true,
     );
   }
@@ -566,15 +588,184 @@ class PoseWorkoutAnalyzer {
     Exercise exercise,
     Map<PoseLandmarkType, Offset> points,
   ) {
+    final repAdded = _countTimedRep(exercise: exercise, active: true);
     return _frame(
       exercise: exercise,
       formScore: 70,
       primary: 'Pose visible',
-      secondary:
-          'Tracking landmarks, but this workout has no specialized rep model yet.',
+      secondary: 'Tracking visible movement as timed work.',
       phase: 'Tracking',
       landmarks: points,
-      repAdded: false,
+      repAdded: repAdded,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeDumbbellCurl(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final arms = _upperArmReadings(pose);
+    if (arms.isEmpty) {
+      return _notVisible(exercise, points);
+    }
+
+    final bottom = arms.any(
+      (arm) => arm.elbowAngle > 138 && arm.wrist.y > arm.elbow.y,
+    );
+    final top = arms.any(
+      (arm) => arm.elbowAngle < 102 && arm.wrist.y < arm.elbow.y,
+    );
+    final repAdded = _countDownUpRep(
+      bottom: bottom,
+      top: top,
+      exercise: exercise,
+    );
+    final activeArm = _mostBentArm(arms);
+    final elbowDrift = arms.any(
+      (arm) => (arm.elbow.x - arm.shoulder.x).abs() > arm.torsoScale * 0.58,
+    );
+    final swinging = arms.any(
+      (arm) =>
+          (arm.wrist.x - arm.elbow.x).abs() > arm.torsoScale * 0.92 &&
+          arm.elbowAngle > 108,
+    );
+    final partialTop = _phase == _RepPhase.bottom && activeArm.elbowAngle > 112;
+    final score = _score([
+      if (elbowDrift) 14 else 0,
+      if (swinging) 12 else 0,
+      if (partialTop) 12 else 0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: top
+          ? 'Curl height reached'
+          : bottom
+          ? 'Arms extended'
+          : 'Curl with control',
+      secondary: elbowDrift
+          ? 'Pin the elbows closer to your ribs before curling again.'
+          : 'Keep shoulders quiet and lower the dumbbells slowly.',
+      phase: top
+          ? 'Top'
+          : bottom
+          ? 'Bottom'
+          : 'Curling',
+      landmarks: points,
+      repAdded: repAdded,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeDumbbellRow(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final arms = _upperArmReadings(pose);
+    if (arms.isEmpty) {
+      return _notVisible(exercise, points);
+    }
+
+    final bottom = arms.any((arm) => arm.elbowAngle > 138);
+    final top = arms.any(
+      (arm) =>
+          arm.elbowAngle < 118 &&
+          arm.wrist.y < arm.hip.y - arm.torsoScale * 0.08,
+    );
+    final repAdded = _countDownUpRep(
+      bottom: bottom,
+      top: top,
+      exercise: exercise,
+    );
+    final activeArm = _mostBentArm(arms);
+    final elbowTooWide =
+        (activeArm.elbow.x - activeArm.shoulder.x).abs() >
+        activeArm.torsoScale * 0.95;
+    final shortenedRep =
+        _phase == _RepPhase.bottom && activeArm.elbowAngle > 126;
+    final score = _score([
+      if (elbowTooWide) 12 else 0,
+      if (shortenedRep) 14 else 0,
+      if (activeArm.wrist.y > activeArm.hip.y + activeArm.torsoScale * 0.4)
+        10
+      else
+        0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: top ? 'Row pull reached' : 'Pull elbow toward hip',
+      secondary: elbowTooWide
+          ? 'Keep the elbow path closer to your side.'
+          : 'Pause near the ribs, then lower until the arm is long.',
+      phase: top
+          ? 'Top'
+          : bottom
+          ? 'Bottom'
+          : 'Rowing',
+      landmarks: points,
+      repAdded: repAdded,
+      poseVisible: true,
+    );
+  }
+
+  WorkoutAnalysisFrame _analyzeLateralRaise(
+    Exercise exercise,
+    Pose pose,
+    Map<PoseLandmarkType, Offset> points,
+  ) {
+    final arms = _upperArmReadings(pose);
+    if (arms.isEmpty) {
+      return _notVisible(exercise, points);
+    }
+
+    final lowered = arms.any(
+      (arm) =>
+          arm.wrist.y > arm.hip.y - arm.torsoScale * 0.18 ||
+          (arm.wrist.x - arm.shoulder.x).abs() < arm.torsoScale * 0.38,
+    );
+    final raised = arms.any(
+      (arm) =>
+          (arm.wrist.x - arm.shoulder.x).abs() > arm.torsoScale * 0.54 &&
+          arm.wrist.y < arm.shoulder.y + arm.torsoScale * 0.28,
+    );
+    final repAdded = _countDownUpRep(
+      bottom: lowered,
+      top: raised,
+      exercise: exercise,
+    );
+    final highestArm = arms.reduce(
+      (best, arm) => arm.wrist.y < best.wrist.y ? arm : best,
+    );
+    final tooHigh =
+        highestArm.wrist.y <
+        highestArm.shoulder.y - highestArm.torsoScale * 0.22;
+    final lockedElbow = arms.any((arm) => arm.elbowAngle > 172 && raised);
+    final score = _score([
+      if (tooHigh) 12 else 0,
+      if (lockedElbow) 10 else 0,
+      if (!raised && _phase == _RepPhase.bottom) 10 else 0,
+    ]);
+
+    return _frame(
+      exercise: exercise,
+      formScore: score,
+      primary: raised ? 'Shoulder height reached' : 'Raise out to the side',
+      secondary: tooHigh
+          ? 'Stop around shoulder height and keep the neck relaxed.'
+          : 'Lead with soft elbows and avoid using momentum.',
+      phase: raised
+          ? 'Top'
+          : lowered
+          ? 'Bottom'
+          : 'Raising',
+      landmarks: points,
+      repAdded: repAdded,
       poseVisible: true,
     );
   }
@@ -842,6 +1033,28 @@ class PoseWorkoutAnalyzer {
     return false;
   }
 
+  bool _countTimedRep({
+    required Exercise exercise,
+    required bool active,
+    Duration interval = const Duration(seconds: 1),
+  }) {
+    if (!active) {
+      _lastTimedRepAt = null;
+      return false;
+    }
+    final now = DateTime.now();
+    final last = _lastTimedRepAt;
+    if (last == null) {
+      _lastTimedRepAt = now;
+      return false;
+    }
+    if (now.difference(last) < interval) {
+      return false;
+    }
+    _lastTimedRepAt = now;
+    return _addRep(exercise);
+  }
+
   bool _addRep(Exercise exercise) {
     if (_repCount >= exercise.targetReps) {
       return false;
@@ -882,6 +1095,7 @@ class PoseWorkoutAnalyzer {
     Exercise exercise,
     Map<PoseLandmarkType, Offset> points,
   ) {
+    _lastTimedRepAt = null;
     return _frame(
       exercise: exercise,
       formScore: 0,
@@ -962,6 +1176,56 @@ class PoseWorkoutAnalyzer {
     return landmark;
   }
 
+  List<_UpperArmReading> _upperArmReadings(Pose pose) {
+    final readings = <_UpperArmReading>[];
+    for (final side in _BodySide.values) {
+      final shoulder = _landmark(
+        pose,
+        side,
+        PoseLandmarkType.leftShoulder,
+        PoseLandmarkType.rightShoulder,
+      );
+      final elbow = _landmark(
+        pose,
+        side,
+        PoseLandmarkType.leftElbow,
+        PoseLandmarkType.rightElbow,
+      );
+      final wrist = _landmark(
+        pose,
+        side,
+        PoseLandmarkType.leftWrist,
+        PoseLandmarkType.rightWrist,
+      );
+      final hip = _landmark(
+        pose,
+        side,
+        PoseLandmarkType.leftHip,
+        PoseLandmarkType.rightHip,
+      );
+      if ([shoulder, elbow, wrist, hip].any((point) => point == null)) {
+        continue;
+      }
+      readings.add(
+        _UpperArmReading(
+          shoulder: shoulder!,
+          elbow: elbow!,
+          wrist: wrist!,
+          hip: hip!,
+          elbowAngle: _angle(shoulder, elbow, wrist),
+          torsoScale: _torsoScale(shoulder, hip),
+        ),
+      );
+    }
+    return readings;
+  }
+
+  _UpperArmReading _mostBentArm(List<_UpperArmReading> readings) {
+    return readings.reduce(
+      (best, arm) => arm.elbowAngle < best.elbowAngle ? arm : best,
+    );
+  }
+
   PoseLandmark _offsetLandmark(PoseLandmark source, double dx, double dy) {
     return PoseLandmark(
       type: source.type,
@@ -995,4 +1259,22 @@ class PoseWorkoutAnalyzer {
     final penalty = penalties.fold<int>(0, (total, value) => total + value);
     return (100 - penalty).clamp(0, 100).toInt();
   }
+}
+
+class _UpperArmReading {
+  const _UpperArmReading({
+    required this.shoulder,
+    required this.elbow,
+    required this.wrist,
+    required this.hip,
+    required this.elbowAngle,
+    required this.torsoScale,
+  });
+
+  final PoseLandmark shoulder;
+  final PoseLandmark elbow;
+  final PoseLandmark wrist;
+  final PoseLandmark hip;
+  final double elbowAngle;
+  final double torsoScale;
 }

@@ -10,6 +10,9 @@ enum TrackingProfile {
   mountainClimber,
   gluteBridge,
   benchDip,
+  dumbbellCurl,
+  dumbbellRow,
+  lateralRaise,
   generic,
 }
 

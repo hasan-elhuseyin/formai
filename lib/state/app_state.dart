@@ -110,7 +110,7 @@ class AppState extends ChangeNotifier {
         final account = _accountByUserId(currentUserId);
         if (account != null) {
           _currentUser = account.user;
-          _data = await _store.loadUserData(account.user.id);
+          _data = await _loadUserDataFor(account.user.id);
           _selectedExercise = _data.workouts.isEmpty
               ? null
               : _data.workouts.first;
@@ -155,7 +155,7 @@ class AppState extends ChangeNotifier {
     }
 
     _currentUser = account.user;
-    _data = await _store.loadUserData(account.user.id);
+    _data = await _loadUserDataFor(account.user.id);
     _selectedExercise = _data.workouts.isEmpty ? null : _data.workouts.first;
     _activeSession = null;
     _selectedTab = 0;
@@ -636,6 +636,35 @@ class AppState extends ChangeNotifier {
     return _workoutTypes.firstWhere(
       (type) => type.id == exercise.typeId,
       orElse: () => WorkoutRepository.workoutTypeById(exercise.typeId),
+    );
+  }
+
+  Future<UserData> _loadUserDataFor(String userId) async {
+    final loaded = await _store.loadUserData(userId);
+    final normalized = _normalizeWorkoutMetadata(loaded);
+    await _store.saveUserData(userId, normalized);
+    return normalized;
+  }
+
+  UserData _normalizeWorkoutMetadata(UserData data) {
+    return data.copyWith(
+      workouts: data.workouts
+          .map(_withCurrentWorkoutMetadata)
+          .toList(growable: false),
+    );
+  }
+
+  Exercise _withCurrentWorkoutMetadata(Exercise workout) {
+    final type = workoutTypeForExercise(workout);
+    final loadKg = type.usesExternalLoad && workout.externalLoadKg <= 0
+        ? type.defaultLoadKg
+        : workout.externalLoadKg;
+    return workout.copyWith(
+      name: type.name,
+      category: type.category,
+      imageAsset: type.imageAsset,
+      trackingProfile: type.trackingProfile,
+      externalLoadKg: _cleanExternalLoad(type, loadKg),
     );
   }
 
