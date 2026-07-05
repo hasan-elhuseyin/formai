@@ -15,6 +15,7 @@ class Exercise {
     required this.repGoal,
     required this.setCount,
     required this.setGoal,
+    required this.externalLoadKg,
     required this.totalReps,
     required this.sessionCount,
     required this.reminderTime,
@@ -37,6 +38,7 @@ class Exercise {
   final int repGoal;
   final int setCount;
   final int setGoal;
+  final double externalLoadKg;
   final int totalReps;
   final int sessionCount;
   final String? reminderTime;
@@ -70,6 +72,7 @@ class Exercise {
     int? repGoal,
     int? setCount,
     int? setGoal,
+    double? externalLoadKg,
     int? totalReps,
     int? sessionCount,
     Object? reminderTime = _sentinel,
@@ -92,6 +95,7 @@ class Exercise {
       repGoal: repGoal ?? this.repGoal,
       setCount: setCount ?? this.setCount,
       setGoal: setGoal ?? this.setGoal,
+      externalLoadKg: externalLoadKg ?? this.externalLoadKg,
       totalReps: totalReps ?? this.totalReps,
       sessionCount: sessionCount ?? this.sessionCount,
       reminderTime: identical(reminderTime, _sentinel)
@@ -119,6 +123,7 @@ class Exercise {
       repGoal: json['repGoal'] as int,
       setCount: json['setCount'] as int? ?? 0,
       setGoal: json['setGoal'] as int? ?? 1,
+      externalLoadKg: (json['externalLoadKg'] as num?)?.toDouble() ?? 0,
       totalReps: json['totalReps'] as int? ?? 0,
       sessionCount: json['sessionCount'] as int? ?? 0,
       reminderTime: json['reminderTime'] as String?,
@@ -146,6 +151,7 @@ class Exercise {
       'repGoal': repGoal,
       'setCount': setCount,
       'setGoal': setGoal,
+      'externalLoadKg': externalLoadKg,
       'totalReps': totalReps,
       'sessionCount': sessionCount,
       'reminderTime': reminderTime,

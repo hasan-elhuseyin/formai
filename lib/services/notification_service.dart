@@ -170,11 +170,14 @@ class NotificationService {
     );
 
     try {
+      final loadLabel = workout.externalLoadKg > 0
+          ? ' · ${workout.externalLoadKg.toStringAsFixed(0)} kg'
+          : '';
       await _plugin.zonedSchedule(
         id: _notificationBaseId(workout.id) + weekday,
         title: 'FORMAI workout',
         body:
-            '${workout.name}: ${workout.setGoal} sets x ${workout.repGoal} reps',
+            '${workout.name}: ${workout.setGoal} sets x ${workout.repGoal} reps$loadLabel',
         scheduledDate: scheduledDate,
         notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

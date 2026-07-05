@@ -346,6 +346,7 @@ class AppState extends ChangeNotifier {
     required WorkoutType type,
     required int repGoal,
     required int setGoal,
+    double? externalLoadKg,
     String? reminderTime,
     List<int> scheduleDays = const [],
     String planNote = '',
@@ -370,6 +371,7 @@ class AppState extends ChangeNotifier {
       repGoal: repGoal.clamp(1, 120).toInt(),
       setCount: 0,
       setGoal: setGoal.clamp(1, 8).toInt(),
+      externalLoadKg: _cleanExternalLoad(type, externalLoadKg),
       totalReps: 0,
       sessionCount: 0,
       reminderTime: reminderTime,
@@ -391,6 +393,7 @@ class AppState extends ChangeNotifier {
     required String workoutId,
     required int repGoal,
     required int setGoal,
+    required double externalLoadKg,
     required String? reminderTime,
     required List<int> scheduleDays,
   }) async {
@@ -404,6 +407,10 @@ class AppState extends ChangeNotifier {
     final updated = existing.copyWith(
       repGoal: repGoal.clamp(1, 120).toInt(),
       setGoal: setGoal.clamp(1, 8).toInt(),
+      externalLoadKg: _cleanExternalLoad(
+        workoutTypeForExercise(existing),
+        externalLoadKg,
+      ),
       reminderTime: cleanedReminder == null || cleanedReminder.isEmpty
           ? null
           : cleanedReminder,
@@ -453,6 +460,7 @@ class AppState extends ChangeNotifier {
         type: draft.type,
         repGoal: draft.repGoal,
         setGoal: draft.setGoal,
+        externalLoadKg: draft.type.defaultLoadKg,
         reminderTime: request.reminderTime,
         scheduleDays: draft.scheduleDays,
         planNote: '${suggestion.title}: ${draft.note}',
@@ -647,7 +655,10 @@ class AppState extends ChangeNotifier {
         ? performedSeconds
         : elapsedSeconds.toDouble();
     final minutes = (activeSeconds / 60).clamp(0.05, 240).toDouble();
-    return type.metValue * 3.5 * _data.bodyWeightKg / 200 * minutes;
+    final loadKg = exercise?.externalLoadKg ?? 0;
+    final effectiveWeightKg =
+        _data.bodyWeightKg + (loadKg * type.loadCalorieFactor);
+    return type.metValue * 3.5 * effectiveWeightKg / 200 * minutes;
   }
 
   Future<void> _saveUserData() async {
@@ -687,6 +698,14 @@ class AppState extends ChangeNotifier {
             .toList()
           ..sort();
     return cleaned;
+  }
+
+  double _cleanExternalLoad(WorkoutType type, double? loadKg) {
+    if (!type.usesExternalLoad) {
+      return 0;
+    }
+    final value = loadKg ?? type.defaultLoadKg;
+    return value.clamp(0, 300).toDouble();
   }
 
   Exercise? _findMatchingExercise(String id) {

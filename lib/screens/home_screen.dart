@@ -95,10 +95,6 @@ class _HomeTopBar extends StatelessWidget {
                           : DecoratedBox(
                               decoration: const BoxDecoration(
                                 color: AppColors.input,
-                                image: DecorationImage(
-                                  image: AssetImage('assets/images/avatar.png'),
-                                  fit: BoxFit.cover,
-                                ),
                               ),
                               child: Center(
                                 child: Text(

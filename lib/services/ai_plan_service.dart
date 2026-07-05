@@ -72,9 +72,11 @@ class AiPlanService {
         ? 'Beginner'
         : 'Intermediate';
     final equipment =
-        normalized.contains('gym') ||
-            normalized.contains('barbell') ||
-            normalized.contains('dumbbell')
+        normalized.contains('dumbbell') || normalized.contains('db')
+        ? 'Dumbbells'
+        : normalized.contains('gym') ||
+              normalized.contains('barbell') ||
+              normalized.contains('weight')
         ? 'Gym or weights'
         : 'Bodyweight';
 
@@ -104,13 +106,17 @@ class AiPlanService {
     final bodyweight =
         request.equipment.toLowerCase().contains('body') ||
         request.equipment.trim().isEmpty;
+    final dumbbells = request.equipment.toLowerCase().contains('dumbbell');
     final targetDays = request.daysPerWeek.clamp(1, 7).toInt();
+    final availableCatalog = catalog
+        .where((type) => _allowedForEquipment(type, request.equipment))
+        .toList(growable: false);
     final selected = <WorkoutType>[];
 
     void add(String id) {
-      final type = catalog.firstWhere(
+      final type = availableCatalog.firstWhere(
         (candidate) => candidate.id == id,
-        orElse: () => catalog.first,
+        orElse: () => _fallbackType(availableCatalog, selected),
       );
       if (!selected.any((existing) => existing.id == type.id)) {
         selected.add(type);
@@ -121,31 +127,55 @@ class AiPlanService {
         goal.contains('conditioning') ||
         goal.contains('fat') ||
         goal.contains('lose')) {
-      add('burpee');
-      add('mountain_climber');
+      if (dumbbells) {
+        add('goblet_squat');
+        add('dumbbell_rdl');
+      } else {
+        add('burpee');
+        add('mountain_climber');
+      }
       add('squat');
       add('plank');
     } else if (goal.contains('strength') || goal.contains('muscle')) {
-      add('push_up');
-      add(bodyweight ? 'pull_up' : 'deadlift');
-      add('squat');
-      add('shoulder_press');
+      if (dumbbells) {
+        add('goblet_squat');
+        add('one_arm_dumbbell_row');
+        add('shoulder_press');
+        add('dumbbell_curl');
+        add('dumbbell_rdl');
+      } else {
+        add('push_up');
+        add(bodyweight ? 'pull_up' : 'deadlift');
+        add('squat');
+        add('shoulder_press');
+      }
     } else if (goal.contains('core') || goal.contains('posture')) {
       add('plank');
-      add('deadlift');
+      add(dumbbells ? 'dumbbell_rdl' : 'deadlift');
       add('push_up');
       add('reverse_lunge');
     } else if (goal.contains('leg') || goal.contains('lower')) {
-      add('squat');
-      add('reverse_lunge');
-      add('deadlift');
+      add(dumbbells ? 'goblet_squat' : 'squat');
+      add(dumbbells ? 'dumbbell_rdl' : 'reverse_lunge');
+      add(dumbbells || bodyweight ? 'glute_bridge' : 'deadlift');
       add('glute_bridge');
     } else {
-      add('push_up');
-      add('squat');
-      add('pull_up');
-      add('plank');
-      add('bench_dip');
+      if (dumbbells) {
+        add('goblet_squat');
+        add('one_arm_dumbbell_row');
+        add('dumbbell_curl');
+        add('dumbbell_lateral_raise');
+      } else {
+        add('push_up');
+        add('squat');
+        add('pull_up');
+        add('plank');
+        add('bench_dip');
+      }
+    }
+
+    if (selected.isEmpty) {
+      selected.add(_fallbackType(availableCatalog, selected));
     }
 
     final days = _scheduleDays(targetDays);
@@ -234,5 +264,26 @@ class AiPlanService {
       6 => const [1, 2, 3, 4, 5, 6],
       _ => const [1, 2, 3, 4, 5, 6, 7],
     };
+  }
+
+  bool _allowedForEquipment(WorkoutType type, String equipment) {
+    final normalized = equipment.toLowerCase();
+    if (normalized.contains('dumbbell')) {
+      return type.equipment == WorkoutEquipment.bodyweight ||
+          type.equipment == WorkoutEquipment.dumbbells;
+    }
+    if (normalized.contains('gym') || normalized.contains('weight')) {
+      return true;
+    }
+    return type.equipment == WorkoutEquipment.bodyweight;
+  }
+
+  WorkoutType _fallbackType(List<WorkoutType> catalog, List<WorkoutType> used) {
+    for (final type in catalog) {
+      if (!used.any((existing) => existing.id == type.id)) {
+        return type;
+      }
+    }
+    return catalog.first;
   }
 }

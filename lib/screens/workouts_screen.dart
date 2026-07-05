@@ -97,24 +97,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   onSendMessage: _sendCoachMessage,
                 ),
                 const SizedBox(height: 28),
-                _PlanCalendarPanel(
-                  selectedDate: _selectedDate,
-                  workoutsForDate: appState.workoutsForDate,
-                  onDateSelected: (date) {
-                    setState(() => _selectedDate = _dateOnly(date));
-                  },
-                  onPickDate: _pickDate,
-                ),
-                const SizedBox(height: 18),
-                LimeButton(
-                  label: 'MOVEMENT LIBRARY',
-                  icon: Icons.library_add_outlined,
-                  onPressed: () => _showMovementLibrarySheet(
-                    context,
-                    scheduledDate: _selectedDate,
-                  ),
-                ),
-                const SizedBox(height: 28),
                 _SectionTitle(
                   title: selectedTitle,
                   actionLabel: 'ADD',
@@ -159,6 +141,24 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                       },
                     ),
                   ),
+                const SizedBox(height: 18),
+                LimeButton(
+                  label: 'MOVEMENT LIBRARY',
+                  icon: Icons.library_add_outlined,
+                  onPressed: () => _showMovementLibrarySheet(
+                    context,
+                    scheduledDate: _selectedDate,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _PlanCalendarPanel(
+                  selectedDate: _selectedDate,
+                  workoutsForDate: appState.workoutsForDate,
+                  onDateSelected: (date) {
+                    setState(() => _selectedDate = _dateOnly(date));
+                  },
+                  onPickDate: _pickDate,
+                ),
               ],
             ),
           ),
@@ -386,6 +386,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     final setsController = TextEditingController(
       text: selectedType.defaultSetGoal.toString(),
     );
+    final loadController = TextEditingController(
+      text: selectedType.usesExternalLoad
+          ? selectedType.defaultLoadKg.toStringAsFixed(0)
+          : '',
+    );
     final reminderController = TextEditingController(text: '08:00');
     var daily = scheduledDate == null;
 
@@ -435,6 +440,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         selectedType = value;
                         repsController.text = value.defaultRepGoal.toString();
                         setsController.text = value.defaultSetGoal.toString();
+                        loadController.text = value.usesExternalLoad
+                            ? value.defaultLoadKg.toStringAsFixed(0)
+                            : '';
                       });
                     },
                   ),
@@ -464,6 +472,18 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     label: 'REMINDER TIME',
                     keyboardType: TextInputType.datetime,
                   ),
+                  if (selectedType.usesExternalLoad) ...[
+                    const SizedBox(height: 12),
+                    _SheetInput(
+                      controller: loadController,
+                      label: selectedType.usesDumbbells
+                          ? 'TOTAL DUMBBELL KG'
+                          : 'LOAD KG',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   SwitchListTile.adaptive(
                     value: daily,
@@ -494,6 +514,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         type: selectedType,
                         repGoal: reps,
                         setGoal: sets,
+                        externalLoadKg: double.tryParse(loadController.text),
                         reminderTime: reminderController.text.trim().isEmpty
                             ? null
                             : reminderController.text.trim(),
@@ -520,6 +541,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
     repsController.dispose();
     setsController.dispose();
+    loadController.dispose();
     reminderController.dispose();
   }
 
@@ -533,6 +555,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
     final setsController = TextEditingController(
       text: exercise.setGoal.toString(),
+    );
+    final type = appState.workoutTypeForExercise(exercise);
+    final loadController = TextEditingController(
+      text: type.usesExternalLoad
+          ? exercise.externalLoadKg.toStringAsFixed(0)
+          : '',
     );
     final reminderController = TextEditingController(
       text: exercise.reminderTime ?? '',
@@ -596,6 +624,18 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     label: 'REMINDER TIME',
                     keyboardType: TextInputType.datetime,
                   ),
+                  if (type.usesExternalLoad) ...[
+                    const SizedBox(height: 12),
+                    _SheetInput(
+                      controller: loadController,
+                      label: type.usesDumbbells
+                          ? 'TOTAL DUMBBELL KG'
+                          : 'LOAD KG',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   _DaySelector(
                     selectedDays: selectedDays,
@@ -622,6 +662,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         workoutId: exercise.id,
                         repGoal: reps,
                         setGoal: sets,
+                        externalLoadKg:
+                            double.tryParse(loadController.text) ??
+                            exercise.externalLoadKg,
                         reminderTime: reminderController.text,
                         scheduleDays: selectedDays.toList(),
                       );
@@ -640,6 +683,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
     repsController.dispose();
     setsController.dispose();
+    loadController.dispose();
     reminderController.dispose();
   }
 
@@ -698,11 +742,18 @@ class _SimpleTopBar extends StatelessWidget {
           height: 72 + topInset,
           padding: EdgeInsets.fromLTRB(24, 16 + topInset, 24, 16),
           color: AppColors.background.withValues(alpha: 0.62),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              FormaiWordmark(size: 20),
-              Icon(Icons.fitness_center, color: AppColors.limeAlt),
+              const FormaiWordmark(size: 20),
+              IconButton(
+                tooltip: 'Progress',
+                onPressed: AppScope.of(context).openStats,
+                icon: const Icon(
+                  Icons.stacked_line_chart,
+                  color: AppColors.limeAlt,
+                ),
+              ),
             ],
           ),
         ),
@@ -1472,6 +1523,9 @@ class _WorkoutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = exercise.progress.clamp(0, 1).toDouble();
+    final loadLabel = exercise.externalLoadKg > 0
+        ? ' · ${exercise.externalLoadKg.toStringAsFixed(0)} kg load'
+        : '';
 
     return Material(
       color: AppColors.input,
@@ -1549,7 +1603,7 @@ class _WorkoutCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      '${exercise.repCount.toString().padLeft(2, '0')} / ${exercise.targetReps} reps · ${exercise.setGoal} sets · ${exercise.depthScore}% form',
+                      '${exercise.repCount.toString().padLeft(2, '0')} / ${exercise.targetReps} reps · ${exercise.setGoal} sets$loadLabel · ${exercise.depthScore}% form',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1588,6 +1642,9 @@ class _WorkoutTypeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loadLabel = type.usesExternalLoad
+        ? ' · ${type.defaultLoadKg.toStringAsFixed(0)} kg'
+        : '';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1623,7 +1680,7 @@ class _WorkoutTypeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${type.defaultSetGoal} x ${type.defaultRepGoal} · ${type.category}',
+                  '${type.defaultSetGoal} x ${type.defaultRepGoal} · ${_equipmentLabel(type)}$loadLabel',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppColors.slate, fontSize: 12),
@@ -1847,6 +1904,14 @@ String _formatDateTitle(DateTime date) {
 
 String _formatShortDate(DateTime date) {
   return '${_monthName(date.month)} ${date.day}';
+}
+
+String _equipmentLabel(WorkoutType type) {
+  return switch (type.equipment) {
+    WorkoutEquipment.bodyweight => type.category,
+    WorkoutEquipment.dumbbells => 'DUMBBELLS',
+    WorkoutEquipment.gym => 'GYM LOAD',
+  };
 }
 
 String _weekdayName(int weekday) {
